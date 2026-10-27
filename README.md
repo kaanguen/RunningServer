@@ -1,9 +1,20 @@
 # Avatar VOS — Dashboard & Server
 
-A browser-based remote control panel for the Avatar VOS experience running on Apple Vision Pro.
+A browser-based remote control panel for the Avatar VOS experience running on Magic Leap 2.
 You open the dashboard on any computer or tablet on the same Wi-Fi network, and it lets you control everything about the avatar in real time — where it stands, how it moves, what it looks like, and how it reacts to the person wearing the headset.
 
 ---
+
+## Implementation status and target platform
+
+The Node.js service and browser dashboard are implemented in this repository for **Magic Leap 2**. The service serves the dashboard, forwards commands to one connected headset, broadcasts telemetry to multiple dashboards, tracks acknowledgements, and records sensor data and commands locally.
+
+The **Unity headset application is a separate integration** and is not included here. Tracking, marker calibration, avatar behavior, rendering and BLE sensor access must be implemented by that application. The new [WebSocket protocol and command catalog](docs/PROTOCOL.md) define the integration contract used by this service. No existing Unity `AvatarFSM.md` was available to verify payload compatibility.
+
+- Use Node.js 22 or newer.
+- Configure the Unity client with `ws://<server-LAN-IP>:8080/ws` and send a `hello` message with role `headset` before sending registry or telemetry.
+- The dashboard uses headset-neutral labels. Automatic lighting calibration is enabled only if the client advertises `ambientLightCalibration` support; ARKit is not used by this service.
+- This is an unauthenticated, trusted-LAN service. Do not expose it directly to the internet.
 
 ## Quick start
 
@@ -18,7 +29,25 @@ Open a browser and go to the address printed in the terminal, for example:
 http://192.168.1.42:8080
 ```
 
-The Vision Pro app connects automatically to the same address over WebSocket.
+Open `http://localhost:8080` on the server computer. Use the printed LAN address from other devices. The Magic Leap 2 app must be configured to connect to the same server address over WebSocket and implement the [protocol](docs/PROTOCOL.md).
+
+```bash
+npm test              # integration tests (HTTP, WebSocket, recording)
+npm run simulate      # separate terminal: synthetic headset for testing
+```
+
+The simulator supplies synthetic telemetry and acknowledges only its implemented command subset; other commands explicitly fail. Stop it before connecting a physical headset. A successful simulator test does not verify Magic Leap hardware integration.
+
+Configure the server with `PORT` and `HOST` if needed, for example `PORT=8081 HOST=127.0.0.1 npm start`. By default it listens on all interfaces on port 8080.
+
+```text
+server.js                    HTTP API, WebSocket relay, recording
+public/                      dashboard (HTML, CSS, JavaScript)
+scripts/simulate-headset.js   synthetic integration client
+test/service.test.js         service integration tests
+docs/PROTOCOL.md             Unity client contract
+recordings/                  runtime data (git-ignored)
+```
 
 ---
 
@@ -31,14 +60,14 @@ The Vision Pro app connects automatically to the same address over WebSocket.
 └─────────────────┘                          └────────┬─────────┘
                                                       │ WebSocket
                                              ┌────────▼─────────┐
-                                             │  Vision Pro app  │
-                                             │  (Unity / AVP)   │
+                                             │ Magic Leap 2 app │
+                                             │     (Unity)      │
                                              └──────────────────┘
 ```
 
 - The **dashboard** (this web page) connects to the server over WebSocket and sends commands when you press buttons or move sliders.
-- The **server** receives those commands and forwards them to the Vision Pro headset.
-- The **Vision Pro app** receives commands, moves the avatar, and sends back live telemetry (position, state, sensor readings).
+- The **server** receives those commands and forwards them to the Magic Leap 2 headset.
+- The **Magic Leap 2 app** receives commands, moves the avatar, and sends back live telemetry (position, state, sensor readings).
 - Everything is broadcast — multiple dashboards can be open at the same time and all stay in sync.
 
 ---
@@ -50,7 +79,7 @@ The coloured dots at the top tell you the current connection state at a glance.
 | Dot | What it means |
 |-----|---------------|
 | **WS** | Dashboard is connected to the server |
-| **AVP** | The Vision Pro headset is connected to the server |
+| **Headset** (legacy label: **AVP**) | The Magic Leap 2 headset is connected to the server |
 | **Avatar** | An avatar is currently in the scene |
 | **Floor** | Floor marker ("Marker A") has been calibrated |
 | **Dir B** | The second marker ("Marker B") / heading has been calibrated — used by the Running Mate stadium setup to know which way the track runs |
@@ -68,7 +97,7 @@ Everything about where the avatar stands and how it moves.
 
 ### Avatar ID
 
-Each avatar has a unique ID (like `alex_v1`). When the Vision Pro connects it sends a list of available avatars — buttons appear automatically. Click one to select it, or type an ID manually.
+Each avatar has a unique ID (like `alex_v1`). When the Magic Leap 2 connects it sends a list of available avatars — buttons appear automatically. Click one to select it, or type an ID manually.
 
 ### Spawn / Despawn
 
@@ -203,19 +232,6 @@ Toggle whether the avatar's head tracks the user's position in real time.
 
 Apply a TV static / noise shader to the avatar — useful for glitch effects.
 
-### Heart
-
-Control the 3D heart organ attached to the avatar.
-
-| Control | What it does |
-|---------|-------------|
-| **Show / Hide** | Toggle visibility of the heart organ |
-| **Stopped / BLE / Manual** | Drive the heartbeat animation — from BLE sensor data or a manually set BPM |
-| **BPM slider** | Set a manual beats-per-minute value |
-
-### Liver
-
-Show or hide the 3D liver organ.
 
 ---
 
@@ -274,19 +290,19 @@ Control the lighting and shadow in the scene.
 | **Yaw** | Horizontal angle — 0 = front, 90 = right |
 | **Intensity** | Brightness (0 = off, 1 = normal, 3 = very bright) |
 | **Color** | Light tint colour |
-| **Calibrate** buttons | Use ARKit's ambient light estimate to automatically match real-world lighting |
+| **Calibrate** buttons | Request ambient light calibration; the Unity client must provide a Magic Leap 2-compatible implementation before this control is enabled |
 
 ### Shadow
 
 Toggle and fine-tune the grounding shadow plane beneath the avatar.
 
-### HUDs in AVP
+### HUDs in the headset
 
 The person in the headset sees floating information panels (HUDs) around them — for example a stadium/lap panel, or debug read-outs. This card lets you show or hide each of those panels remotely.
 
 The buttons are **auto-discovered**: the headset broadcasts a list of every registered panel when it connects, and one button appears per panel. A **highlighted button means the panel is currently visible** on the headset; click to toggle it. If the list is empty you'll see "waiting for AVP HUD registry" until the headset reports in.
 
-> The same show/hide capability also appears inside the feature tabs it belongs to (for example the Running Mate tab has its own **AVP HUD** show/hide for the stadium panel), so you can control a panel from wherever you happen to be working.
+> The same show/hide capability also appears inside the feature tabs it belongs to (for example the Running Mate tab has its own **Headset HUD** (legacy label: **AVP HUD**) show/hide for the stadium panel), so you can control a panel from wherever you happen to be working.
 
 ---
 
@@ -354,7 +370,7 @@ Below the buttons are three live tuning/visibility controls:
 | Control | What it does |
 |---------|-------------|
 | **Anim ×** | Live "foot-skate" fix. While the coach runs, drag this until the planted foot stops sliding on the floor. **Auto** clears the manual override and goes back to the calculated speed. |
-| **AVP HUD** | Show/hide the floating stadium panel *inside the headset* |
+| **Headset HUD** (legacy label: **AVP HUD**) | Show/hide the floating stadium panel *inside the headset* |
 | **Ground path** | Show/hide the lane guide lines drawn on the real floor — use it to check calibration by walking the lane |
 
 ### Status
@@ -423,10 +439,11 @@ Common command families:
 |--------|---------|----------|
 | `avatar.*` | Avatar / Behavior tabs | `avatar.spawn`, `avatar.setBehaviorState`, `avatar.setMode`, `avatar.configurePlacement`, `avatar.playAnimation` |
 | `scene.*` | Scene tab | `scene.setLight`, `scene.setShadow`, `scene.setHudVisible`, `scene.setRunningMateHudVisible`, `scene.setRunningMatePathVisible` |
+| `sensor.*` | Sensor controls | `sensor.connect`, `sensor.disconnect` |
 | `exercise.*` | Exercises tab | `exercise.setActiveProfile` |
 | `runningMate.*` | Running Mate tab | `runningMate.configure`, `runningMate.command`, `runningMate.adjust`, `runningMate.tune` |
 
-See `Instructions/AvatarFSM.md` in the Unity project for the full, authoritative list of command types and payload fields.
+See [docs/PROTOCOL.md](docs/PROTOCOL.md) for the implemented command envelope, dashboard payload fields, and telemetry schema. Reconcile these fields with `Instructions/AvatarFSM.md` when integrating an existing Unity project.
 
 ---
 
@@ -441,3 +458,9 @@ See `Instructions/AvatarFSM.md` in the Unity project for the full, authoritative
 | `/api/session/stop` | POST | End the current session |
 | `/api/recording/start` | POST | Start recording to disk |
 | `/api/recording/stop` | POST | Stop the active recording |
+
+## iPad dashboard
+
+The dashboard supports iPad portrait and landscape layouts with touch-sized controls, two-column cards where space allows, and a compact top navigation on tablet widths. The event log starts collapsed; its visibility preference is saved per browser. Heart and liver controls are omitted from the dashboard.
+
+Start the server with `npm start`, connect the iPad to the same local network, and open the printed **LAN** URL in Safari (for example `http://192.168.1.42:8080`). `localhost` on the iPad refers to the iPad itself, not the server computer. Multiple dashboards can connect simultaneously.
