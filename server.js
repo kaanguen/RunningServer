@@ -216,7 +216,7 @@ export function createService({ recordingsDir = resolve(root, 'recordings'), com
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const service = createService();
-  const port = Number(process.env.PORT || 8080), host = process.env.HOST || '0.0.0.0';
+  const port = Number(process.env.PORT || 8081), host = process.env.HOST || '0.0.0.0';
   service.server.on('error', error => { console.error(error.message); process.exitCode = 1; });
   service.server.listen(port, host, () => {
     console.log(`Avatar VOS · Magic Leap 2\nLocal: http://localhost:${service.server.address().port}`);

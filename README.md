@@ -12,7 +12,7 @@ The Node.js service and browser dashboard are implemented in this repository for
 The **Unity headset application is a separate integration** and is not included here. Tracking, marker calibration, avatar behavior, rendering and BLE sensor access must be implemented by that application. The new [WebSocket protocol and command catalog](docs/PROTOCOL.md) define the integration contract used by this service. No existing Unity `AvatarFSM.md` was available to verify payload compatibility.
 
 - Use Node.js 22 or newer.
-- Configure the Unity client with `ws://<server-LAN-IP>:8080/ws` and send a `hello` message with role `headset` before sending registry or telemetry.
+- Configure the Unity client with `ws://<server-LAN-IP>:8081/ws` and send a `hello` message with role `headset` before sending registry or telemetry.
 - The dashboard uses headset-neutral labels. Automatic lighting calibration is enabled only if the client advertises `ambientLightCalibration` support; ARKit is not used by this service.
 - This is an unauthenticated, trusted-LAN service. Do not expose it directly to the internet.
 
@@ -26,10 +26,10 @@ node server.js
 Open a browser and go to the address printed in the terminal, for example:
 
 ```
-http://192.168.1.42:8080
+http://192.168.1.42:8081
 ```
 
-Open `http://localhost:8080` on the server computer. Use the printed LAN address from other devices. The Magic Leap 2 app must be configured to connect to the same server address over WebSocket and implement the [protocol](docs/PROTOCOL.md).
+Open `http://localhost:8081` on the server computer. Use the printed LAN address from other devices. The Magic Leap 2 app must be configured to connect to the same server address over WebSocket and implement the [protocol](docs/PROTOCOL.md).
 
 ```bash
 npm test              # integration tests (HTTP, WebSocket, recording)
@@ -38,7 +38,7 @@ npm run simulate      # separate terminal: synthetic headset for testing
 
 The simulator supplies synthetic telemetry and acknowledges only its implemented command subset; other commands explicitly fail. Stop it before connecting a physical headset. A successful simulator test does not verify Magic Leap hardware integration.
 
-Configure the server with `PORT` and `HOST` if needed, for example `PORT=8081 HOST=127.0.0.1 npm start`. By default it listens on all interfaces on port 8080.
+Configure the server with `PORT` and `HOST` if needed, for example `PORT=8081 HOST=127.0.0.1 npm start`. By default it listens on all interfaces on port 8081.
 
 ```text
 server.js                    HTTP API, WebSocket relay, recording
@@ -56,7 +56,7 @@ recordings/                  runtime data (git-ignored)
 ```
 ┌─────────────────┐        WebSocket        ┌──────────────────┐
 │  Dashboard      │ ◄─────────────────────► │  Node.js server  │
-│  (browser)      │      (port 8080)         │  server.js       │
+│  (browser)      │      (port 8081)         │  server.js       │
 └─────────────────┘                          └────────┬─────────┘
                                                       │ WebSocket
                                              ┌────────▼─────────┐
@@ -428,7 +428,7 @@ A command looks like this:
 You can send commands directly from any tool (curl, Postman, your own code):
 
 ```bash
-curl -X POST http://192.168.1.42:8080/api/command \
+curl -X POST http://192.168.1.42:8081/api/command \
   -H "Content-Type: application/json" \
   -d '{"commandType":"avatar.setBehaviorState","targetId":"alex_v1","commandPayload":{"behaviorState":"Reaction"}}'
 ```
@@ -463,4 +463,33 @@ See [docs/PROTOCOL.md](docs/PROTOCOL.md) for the implemented command envelope, d
 
 The dashboard supports iPad portrait and landscape layouts with touch-sized controls, two-column cards where space allows, and a compact top navigation on tablet widths. The event log starts collapsed; its visibility preference is saved per browser. Heart and liver controls are omitted from the dashboard.
 
-Start the server with `npm start`, connect the iPad to the same local network, and open the printed **LAN** URL in Safari (for example `http://192.168.1.42:8080`). `localhost` on the iPad refers to the iPad itself, not the server computer. Multiple dashboards can connect simultaneously.
+Start the server with `npm start`, connect the iPad to the same local network, and open the printed **LAN** URL in Safari (for example `http://192.168.1.42:8081`). `localhost` on the iPad refers to the iPad itself, not the server computer. Multiple dashboards can connect simultaneously.
+
+
+## MarkerML2: Kalibrierungssteuerung (27.10.2026)
+
+Der aktuelle lokale Dashboard-Tab **Kalibrierung** bietet Sweet-Spot-Platzierung für den SideBySide-Avatar (acht Richtungen, Abstand und Blickrichtung), Rekalibrierung aus Kopfposition/Blickrichtung, Höhenkorrektur und Feinversätze der Laufwelt. Die Seite enthält keine Herz-/Leber-Anzeigesteuerung.
+
+Voraussetzung: pausierte Session, gültiges Headtracking und aktuelle MarkerML2-App. Ohne passende Client-Capabilities bleiben die Knöpfe deaktiviert. Erfolgreiche Verarbeitung wird durch die Brille bestätigt. Laufdistanz, Zeit und Ghost-Aufnahme bleiben bei diesen Kalibrierungsbefehlen erhalten.
+
+Client-Befehle: `avatar.configurePlacement` (`position`, `facing`, `distance`), `avatar.reposition`, `scene.recalibrate` (`includeHeight`), `scene.adjustHeight` (`deltaMetres`), `runningMate.adjust` (absolute `along`, `across`, `heading` oder `reset: true`). Vollständige Rekalibrierung berechnet die Höhe aus der Körpergröße; reine Blickausrichtung erhält die Höhe. Beide entfernen bestehende Feinversätze. Der Ghost folgt weiterhin seiner Bahnposition.
+
+Die früheren generischen Beschreibungen von SweetSpotFollow, Toleranz/Glättung, Reaktionsverhalten und Marker-A/B-Stadionkalibrierung sind kein Funktionsnachweis für den aktuellen MarkerML2-Laufbandclient. In diesem Schritt ist nur die feste Platzierung und Kalibrierung implementiert.
+
+
+## Avatar-Bahnen und echte 400-m-Bahn (27.10.2026)
+
+Unter **Kalibrierung → Avatar-Bahn** gilt die Auswahl 1–8 für Side by Side und Tempo-Partner. Beim Ghost bleibt seine Zeitaufnahme erhalten. Im Laufbandmodus bewegt sich die Welt weiter unter dem Nutzer. **Echte 400-m-Bahn** aktiviert dagegen eine feste XR-Welt und Nutzerfortschritt aus der getrackten Kopfposition.
+
+Die Stadionkalibrierung verwendet zwei Punkte auf der Messlinie von Bahn 1: A an der gemeinsamen Start-/Ziellinie, B eine bekannte, entlang der Bahn ausgemessene Strecke von 5–100 m weiter gegen den Uhrzeigersinn. Standard: 20 m. Das Modell passt seine Verschiebung und Drehung an; es vermisst keine unbekannte Bahnform und skaliert das Standardoval nicht. Höhe aus Körpergröße und Feinausrichtung anschließend am Boden prüfen. Der Wechsel der Laufumgebung beginnt eine neue Session und löscht deren Statistik/Rekorde.
+
+Die ganze Bahn lässt sich danach mit Zentimeter-/Meter-Schritten, Drehkorrektur und direkten absoluten Versätzen (entlang/quer ±100 m, Drehung ±180°) verschieben. Kalibrierungsaktionen pausieren automatisch und verlangen bestätigte Antworten der Brille. Die Session bleibt pausiert.
+
+Wire-Befehle: `runningMate.setLane` (`lane` 1–8), `scene.setTrackEnvironment` (`environment`: Stadium/Treadmill), `scene.captureTrackPoint` (`point`: A/B; bei B `distanceAlongTrack`), vorhandenes `runningMate.adjust` für absolute Feinversätze. Neue Funktionen benötigen eine neu gebaute und installierte MarkerML2-App; die Webseite allein genügt nicht. Tests prüfen Geometrie, Zwei-Punkt-Drehung und Serverrelay. Die vollständige physische 400-m-Runde wurde noch nicht auf dem Gerät verifiziert. Kalibrierung gilt nur für die aktuelle XR-Session.
+
+
+## Start über Bodenmarker und Plane
+
+Die aktuelle MarkerML2-Quelle aktiviert beim Öffnen den Marker-/Plane-Tracker der Laufszene. Laufbahn und Avatar erscheinen erst nach einem aktuellen Bodenmarker und einer passenden getrackten Floor-Plane unter dem Marker. Die erkannte Plane liefert die Höhe; Körpergrößen-/Höhenfelder sind aus dem Dashboard entfernt. Der Avatar erscheint auf Bahn 3 und wartet gestoppt auf den Laufstart. Die Marker- und Spatial-Mapping-Berechtigungen müssen auf der Brille erlaubt werden.
+
+Die aktuelle Szene verwendet AprilTag Dictionary_36H11 mit 0,10 m konfigurierter Kantenlänge. Bei **Bodenmarker neu scannen** pausiert die App und wartet erneut auf den Marker samt Bodenfläche. Telemetrie: `treadmill.markerPlacement` mit `required`, `floorConfirmed`, `markerId`, `status`. Befehl: `scene.rescanMarker` mit leerem Payload. Der alte separate Marker-Avatar wird in der Laufbandszene nicht zusätzlich erzeugt. Zum Verwenden die aktualisierte Unity-App neu bauen/installieren; ein realer Scan ist noch nicht mit diesem Build verifiziert.
