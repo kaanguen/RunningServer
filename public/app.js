@@ -1,6 +1,7 @@
 const $ = selector => document.querySelector(selector);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let userSpeedDraft={source:'FixedTest',speedKmh:10},userSpeedPending=false,ghostSpeedPending=false;
+let collectiblesDraft={source:'Fixed',fixedCount:10},collectiblesPending=false,collectiblesEdited=false;
 const defaults = { paceSeconds: 360, mode: 'TempoPartner', showTrack: true };
 let draft = { ...defaults };
 try {
@@ -49,7 +50,7 @@ async function calibrate(command,payload) {
   catch(e){notice(e.message);}
   finally {calibrationPending=false;updateLive();}
 }
-const cardStyles = {'Session konfigurieren':'config','Deine Laufvorschau':'preview','Nutzertempo · Test oder Laufband':'user','Laufsteuerung':'run','Live auf der 400-m-Bahn':'track','Ghost-Geschwindigkeit testen':'ghost','Deine Rekordzeiten':'records','Live-Status':'status','Laufumgebung':'environment','Avatar-Bahn · beide Modi':'lane','Neu ausrichten':'realign','Bodenhöhe aus erkannter Plane':'floor'};
+const cardStyles = {'Sammelkugeln':'collectibles','Session konfigurieren':'config','Deine Laufvorschau':'preview','Nutzertempo · Test oder Laufband':'user','Laufsteuerung':'run','Live auf der 400-m-Bahn':'track','Ghost-Geschwindigkeit testen':'ghost','Deine Rekordzeiten':'records','Live-Status':'status','Laufumgebung':'environment','Avatar-Bahn · beide Modi':'lane','Neu ausrichten':'realign','Bodenhöhe aus erkannter Plane':'floor'};
 function card(title,content,wide=false,tag='') {return `<article class="card ${wide?'wide':''} ${cardStyles[title]?'card-'+cardStyles[title]:''}"><div class="card-heading"><h2>${title}</h2>${tag?`<span class="pill">${tag}</span>`:''}</div>${content}</article>`;}
 function metric(label,value,unit='') {return `<div class="metric"><small>${label}</small><strong>${escape(value??'—')}</strong><span>${unit}</span></div>`;}
 async function changeEnvironment(environment) {
@@ -63,6 +64,7 @@ function treadmill() {
   + card('Session konfigurieren',`<form id="settings-form"><div class="row"><label>Zieltempo des Begleiters · min/km<input id="pace" value="${paceText(draft.paceSeconds)}" inputmode="text" autocomplete="off" required aria-describedby="pace-hint"><small id="pace-hint">3:00 bis 20:00 min/km</small></label></div><label>Gewählter Laufmodus</label><div class="mode-picker" role="group" aria-label="Laufmodus"><button type="button" data-mode="SideBySide" aria-pressed="${draft.mode==='SideBySide'}"><span>↔</span><strong>Side by Side</strong><small>Läuft neben dir</small></button><button type="button" data-mode="TempoPartner" aria-pressed="${draft.mode==='TempoPartner'}"><span>↗</span><strong>Tempo-Partner</strong><small>Folgt deiner besten Runde</small></button></div><label class="track-switch"><input type="checkbox" id="show-track" ${draft.showTrack?'checked':''}><span><strong>Rennstrecke anzeigen</strong><small>Wird mit „Auf Brille anwenden“ übernommen.</small></span></label><div class="buttons"><button type="submit" class="primary">Auf diesem Gerät speichern</button><button type="button" id="send-settings">Auf Brille anwenden</button><button type="button" id="reset-settings">Einstellungen zurücksetzen</button></div><p class="help" id="save-state">${escape(settingsFeedback)}</p></form>`,false,'LOKAL')
   + card('Deine Laufvorschau',`<div class="metric-grid setup-metrics" id="setup-metrics"></div><div class="treadmill-preview"><svg viewBox="0 0 400 150" role="img" aria-label="Schematische Vorschau der virtuellen 400-Meter-Bahn"><g id="preview-route"><rect x="40" y="20" width="320" height="110" rx="55" fill="#202b3b" stroke="#536b8d"/><rect x="49" y="29" width="302" height="92" rx="46" fill="none" stroke="#899bb5"/><rect x="58" y="38" width="284" height="74" rx="37" fill="none" stroke="#899bb5"/><rect x="67" y="47" width="266" height="56" rx="28" fill="none" stroke="#899bb5"/></g><circle cx="200" cy="121" r="6" fill="#409cff" stroke="white" stroke-width="2"/><circle id="preview-partner" cx="230" cy="121" r="6" fill="#f09665" stroke="white" stroke-width="2"/><text x="200" y="72" text-anchor="middle" fill="#b1bfd2" font-size="10" letter-spacing="2">400 M · VIRTUELLE RUNDE</text><text x="200" y="90" text-anchor="middle" fill="#9baac1" font-size="9">KONFIGURATIONSVORSCHAU</text></svg></div><p id="mode-description" class="help"></p><p class="help">Beim Laufbandtraining läuft die virtuelle Strecke an dir vorbei. Die Vorschau zeigt deine Konfiguration, keine Live-Position.</p>`,false,'VORSCHAU')
   + card('Nutzertempo · Test oder Laufband',`<form id="user-speed-form"><div class="row"><label>Geschwindigkeitsquelle<select id="user-speed-source"><option value="FixedTest" ${userSpeedDraft.source==='FixedTest'?'selected':''}>Test · feste km/h</option><option value="Treadmill" ${userSpeedDraft.source==='Treadmill'?'selected':''}>Laufband · Sensordaten</option></select></label><label>Deine simulierte Geschwindigkeit · km/h<input id="user-speed-value" type="number" min="0" max="100" step="any" value="${userSpeedDraft.speedKmh}" inputmode="decimal" required ${userSpeedDraft.source==='Treadmill'?'disabled':''}></label></div><button id="user-speed-apply" class="primary" type="submit">Dein Tempo anwenden</button></form><div id="user-speed-metrics" class="metric-grid"></div><p id="user-speed-status" class="help" role="status"></p><p class="help">Testtempo simuliert deine Geschwindigkeit unabhängig vom Ghost. Im Laufbandmodus bleibst du körperlich stehen; die virtuelle Welt folgt später den gemessenen Laufband-km/h. Ohne aktuelle Laufbanddaten bleibt das Tempo bei 0. Die Hardware-Anbindung ist noch nicht implementiert. Quelle und feste Test-km/h lassen sich während des Laufs ändern, ohne den Avatar anzuhalten. Für eine echte Stadionbahn bleibt Headtracking maßgeblich.</p>`,true,'NUTZER')
+  + card('Sammelkugeln',`<form id="collectibles-form"><div class="row"><label for="collectibles-source">Kugelmenge steuern<select id="collectibles-source"><option value="Fixed" ${collectiblesDraft.source==='Fixed'?'selected':''}>Feste Eingabe · ohne Sensor</option><option value="OxygenSensor" ${collectiblesDraft.source==='OxygenSensor'?'selected':''}>Sauerstoffsensor · SpO₂</option></select></label><label for="collectibles-count">Kugeln pro Reihe<input id="collectibles-count" type="number" min="0" max="30" step="1" inputmode="numeric" value="${collectiblesDraft.fixedCount}" required ${collectiblesDraft.source==='OxygenSensor'?'disabled':''}><small>0 bis 30 · 0 schaltet die Kugeln aus</small></label></div><button id="collectibles-apply" class="primary" type="submit">Kugelmenge anwenden</button></form><div id="collectibles-metrics" class="metric-grid"></div><p id="collectibles-status" class="help" role="status"></p><p class="help">Feste Eingabe funktioniert ohne Sensor. Im Sensormodus erzeugen höhere aktuelle SpO₂-Werte mehr Kugeln pro Reihe. Ohne gültiges Sensorsignal erscheinen keine Kugeln. Die Wellenreihen bleiben an der Strecke verankert; Änderungen erhalten den Sammelzähler. Das ist eine Spielzuordnung.</p>`,true,'SAMMELN')
   + card('Laufsteuerung',`<div class="buttons"><button data-run="start" class="primary">Lauf starten</button><button data-run="pause">Pause</button><button data-run="resume">Fortsetzen</button><button data-run="stop">Stoppen</button><button data-run="reset">Laufdaten zurücksetzen</button></div><p id="run-feedback" class="help" role="status"></p><p class="help">Die Brille bestätigt jeden Befehl. Bei Verbindungsabbruch pausiert der Lauf.</p>`,true)
   + card('Live auf der 400-m-Bahn',`<div class="live-track-wrap"><svg id="live-track" viewBox="0 0 400 210" role="img" aria-label="Live-Positionen auf der virtuellen Laufbahn"><path id="live-route" d="M275 45 A60 60 0 0 1 275 165 L125 165 A60 60 0 0 1 125 45 Z" fill="#202b3b" stroke="#536b8d" stroke-width="22"/><path d="M275 45 A60 60 0 0 1 275 165 L125 165 A60 60 0 0 1 125 45 Z" fill="none" stroke="#899bb5" stroke-width="1.5"/><line x1="275" y1="31" x2="275" y2="59" stroke="#b1bfd2" stroke-width="2"/><text x="200" y="99" text-anchor="middle" fill="#b1bfd2" font-size="13">400 m</text><text id="live-track-state" x="200" y="119" text-anchor="middle" fill="#b1bfd2" font-size="10">Warte auf Live-Daten</text><circle id="live-ghost" r="10" fill="#f09665" stroke="#899bb5" stroke-width="2" hidden/><circle id="live-user" r="5" fill="#409cff" stroke="#899bb5" stroke-width="2" hidden/></svg></div><div class="track-legend"><span><i class="user-dot"></i>Du</span><span><i class="ghost-dot"></i>Ghost</span><span id="live-freshness">Keine Positionsdaten</span></div><div class="metric-grid" id="ghost-metrics"></div><p class="help">Virtuelle Positionen entlang der Bahn, keine GPS-Ortung. Aktualisierung durch die Brille.</p>`,true,'LIVE')
   + card('Ghost-Geschwindigkeit testen',`<form id="ghost-speed-form"><label for="ghost-speed">Testgeschwindigkeit · km/h</label><div class="ghost-speed-controls"><input id="ghost-speed" type="number" min="0" step="any" value="10" inputmode="decimal" required><button id="ghost-speed-apply" type="submit" class="primary">Testtempo übernehmen</button><button id="ghost-speed-auto" type="button">Zurück zur Bestzeit</button></div></form><p id="ghost-mode-status" class="help" role="status">Warte auf Ghost-Telemetrie.</p><p class="help">Im Testmodus bewegt sich der Ghost mit deinem Testtempo unabhängig von der Bestzeit. 0 km/h hält ihn an. Pause und Stoppen pausieren auch den Ghost. Aufgezeichnete Bestzeiten bleiben erhalten.</p>`,true,'TESTMODUS')
@@ -112,7 +114,7 @@ function organizeLayout() {
   };
   if (activeTab === 'treadmill') {
     content.querySelector('.project-note')?.remove();
-    const settings = group('settings-stack', 'Laufeinstellungen', [content.querySelector('.card-config'), content.querySelector('.card-user')]);
+    const settings = group('settings-stack', 'Laufeinstellungen', [content.querySelector('.card-config'), content.querySelector('.card-user'), content.querySelector('.card-collectibles')]);
     const live = group('live-stack', 'Live-Lauf und Steuerung', [content.querySelector('.card-status'), content.querySelector('.card-track'), content.querySelector('.card-run')]);
     const records = content.querySelector('.card-records');
     const preview = content.querySelector('.card-preview');
@@ -248,6 +250,22 @@ function bind() {
       finally {userSpeedPending=false;updateLive();}
     };
   }
+  if($('#collectibles-form')) {
+    $('#collectibles-source').onchange=()=>{
+      collectiblesDraft.source=$('#collectibles-source').value;collectiblesEdited=true;
+      $('#collectibles-count').disabled=collectiblesDraft.source==='OxygenSensor';
+    };
+    $('#collectibles-count').oninput=()=>{collectiblesEdited=true;const count=Number($('#collectibles-count').value);if(Number.isInteger(count)&&count>=0&&count<=30)collectiblesDraft.fixedCount=count;};
+    $('#collectibles-form').onsubmit=async event=>{
+      event.preventDefault();if(collectiblesPending||!$('#collectibles-form').reportValidity())return;
+      const source=$('#collectibles-source').value, fixedCount=Number($('#collectibles-count').value);
+      if(!['Fixed','OxygenSensor'].includes(source)||!Number.isInteger(fixedCount)||fixedCount<0||fixedCount>30)return;
+      collectiblesDraft={source,fixedCount};collectiblesEdited=true;collectiblesPending=true;updateLive();
+      try {await confirmedCommand('runningMate.setCollectibles',{source,fixedCount});notice('Kugelmenge von der Brille bestätigt.');}
+      catch(error){notice(error.message);}
+      finally {collectiblesPending=false;updateLive();}
+    };
+  }
   if($('#ghost-speed-form')) $('#ghost-speed-form').onsubmit=async event=>{
     event.preventDefault();
     const input=$('#ghost-speed'), speedKmh=Number(input.value);
@@ -286,6 +304,24 @@ function bind() {
   });
   document.querySelectorAll('[data-height-nudge]').forEach(button=>button.onclick=()=>calibrate('scene.adjustHeight',{deltaMetres:Number(button.dataset.heightNudge)}));
   for(const [id,path,getData] of [['session-start','session/start',()=>({name:$('#session-name').value})],['session-stop','session/stop',()=>({})],['recording-start','recording/start',()=>({})],['recording-stop','recording/stop',()=>({})]]) on(id,async()=>{await api(path,getData());});
+}
+function updateCollectibles(run,isML2) {
+  if(!$('#collectibles-status'))return;
+  const fresh=connected&&isML2&&Date.now()-lastTelemetryAt<5000;
+  const supported=state.registry?.commands?.includes('runningMate.setCollectibles');
+  const c=fresh?run.collectibles:null;
+  if(c&&!collectiblesEdited) {
+    collectiblesDraft={source:c.source,fixedCount:c.fixedCount};
+    $('#collectibles-source').value=c.source;$('#collectibles-count').value=c.fixedCount;
+    $('#collectibles-count').disabled=c.source==='OxygenSensor';
+  }
+  $('#collectibles-apply').disabled=collectiblesPending||!fresh||!supported;
+  $('#collectibles-source').disabled=collectiblesPending;
+  $('#collectibles-count').disabled=collectiblesPending||collectiblesDraft.source==='OxygenSensor';
+  const oxygen=c&&typeof c.oxygenPercent==='number'?c.oxygenPercent.toLocaleString('de-DE',{maximumFractionDigits:1}):null;
+  $('#collectibles-metrics').innerHTML=metric('AKTIVE QUELLE',c?(c.source==='OxygenSensor'?'Sauerstoffsensor':'Feste Eingabe'):null)
+    +metric('SpO₂',oxygen,'%')+metric('KUGELN / REIHE',c?.rowCount)+metric('EINGESAMMELT',c?.collected);
+  $('#collectibles-status').textContent=collectiblesPending?'Warte auf Bestätigung der Brille …':!fresh?'Keine aktuellen Daten von der Brille.':!supported?'Kugelsteuerung benötigt die aktualisierte App auf der Brille.':!c?'Warte auf Kugeldaten.':c.source==='OxygenSensor'?(c.oxygenReady?'Sauerstoffsensor aktiv · die Kugelmenge folgt dem aktuellen SpO₂-Wert.':'Sauerstoffsensor gewählt · kein aktuelles gültiges Signal · keine Kugeln. Feste Eingabe funktioniert ohne Sensor.'):c.fixedCount===0?'Feste Eingabe · Kugeln ausgeschaltet.':`Feste Eingabe · ${c.fixedCount} Kugeln pro Reihe · unabhängig vom Sensor.`;
 }
 function updateUserSpeed(run,isML2) {
   if(!$('#user-speed-status'))return;
@@ -438,6 +474,7 @@ function updateLive() {
   }
   updateGhostLive(run,isML2);
   updateUserSpeed(run,isML2);
+  updateCollectibles(run,isML2);
   updateRecords(run,isML2);
   updateCalibration(run,isML2);
   const indicators=[['Server',connected],['Headset',state.headsetConnected],['MarkerML2',isML2],['BLE',state.headsetConnected&&t.ble?.connected],['REC',state.recording]];
