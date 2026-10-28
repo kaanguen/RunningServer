@@ -56,7 +56,7 @@ Bei Fehlern: `success: false` und `error`. Fehlende Bestätigungen laufen nach z
 
 | Befehl | Payload / Wirkung |
 | --- | --- |
-| `runningMate.configure` | Optional `paceSeconds` (180–1200), `mode` (`SideBySide`/`TempoPartner`), `showTrack` (Boolean). Setzt Session-Statistik/Ghost-Aufnahme zurück und pausiert. Pace betrifft den Avatar, nicht das Nutzertempo. |
+| `runningMate.configure` | Optional `paceSeconds` (180–1200), `mode` (`SideBySide`/`TempoPartner`), `showTrack` (Boolean). Erhält Session-Statistik und Ghost-Aufnahme und pausiert. Pace betrifft den Avatar, nicht das Nutzertempo. |
 | `runningMate.command` | `action`: `spawn`, `start`, `pause`, `resume`, `stop`, `reset`, `despawn`. `start`/`spawn` setzen Bahn 3; `resume` erhält die ausgewählte Bahn. |
 | `runningMate.setLane` | `lane` als Ganzzahl 1–8. Gilt für beide Avatar-Modi. |
 | `runningMate.setUserSpeed` | `source: "FixedTest"` mit `speedKmh` (0–100) oder `source: "Treadmill"`. In der echten Stadionumgebung nicht aktiv. Quellenwechsel erhält den Laufzustand und die Avatar-Pace. |
@@ -107,7 +107,7 @@ Unity sendet ungefähr mit 5 Hz ein `telemetry`-Objekt. Die aktuellen Laufwerte 
 | `calibration` | `along`, `across`, `heading`, `surfaceHeight` |
 | `stadiumCalibration` | `pointA`, `calibrated`, `baselineMetres`, `raceStartTrackMetres` |
 | `placement` | Sweet-Spot-Entwurf/Anwendung und `laneActive` |
-| `ghost` | `active`, `distance`, `trackPositionMetres`, `speedKmh`, `gapMetres`, `testMode`, `testSpeedKmh`, `recordedLap` |
+| `ghost` | `active`, `distance`, `trackPositionMetres`, `speedKmh`, `gapMetres`, `testMode`, `testSpeedKmh`, `recordedLap`, `hasRecording`, `playbackMode` (`TestSpeed`/`RecordedLap`/`TargetPace`) |
 | `records` | `fastest100mSeconds`, `bestLapSeconds`, `fastest1KmSeconds`: gemessene Zeiten oder `null` |
 
 Zusätzlich: `data.ble.connected` und `data.huds.stadium`. Aktuell werden keine vollständigen BLE-Vitalwerte oder Übungserkennungen von dieser Brücke geliefert. Verschachtelte Objekte im Relay werden ersetzt; der Client sendet vollständige Teilobjekte.

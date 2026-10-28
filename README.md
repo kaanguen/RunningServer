@@ -99,9 +99,9 @@ Die ganze Bahn lässt sich entlang/quer mit Zentimeter-/Meter-Schritten oder abs
 
 ### Ghost und Rekorde
 
-Das Ghost-Testtempo überschreibt nur den Ghost. 0 km/h hält ihn an; **Zurück zur Bestzeit** aktiviert wieder sein normales Ziel-/Bestzeitprofil.
+Das Ghost-Testtempo überschreibt nur den Ghost. 0 km/h hält ihn an; **Zurück zur Bestzeit** aktiviert wieder die aufgezeichnete beste vollständige Runde – auch wenn diese langsamer als die Zielpace war. Fehlt eine Aufnahme, heißt der Knopf **Zurück zur Zielpace**. Ein pausierter Lauf bleibt beim Umschalten pausiert.
 
-Die Rekordkarte zeigt tatsächlich gemessene vollständige 100-m-, 400-m- und 1-km-Zeiten der aktuellen App-Session. Ziel-/Beispielzeiten zählen nicht. Reset, Neukonfiguration, Umgebungswechsel oder App-Neustart löschen diese Session-Werte. Eine dauerhafte persönliche Rekorddatenbank ist nicht implementiert.
+Die Rekordkarte zeigt tatsächlich gemessene vollständige 100-m-, 400-m- und 1-km-Zeiten der aktuellen App-Session. Ziel-/Beispielzeiten zählen nicht. Reset, Umgebungswechsel oder App-Neustart löschen diese Session-Werte. Änderungen an Pace, Modus und Bahnsichtbarkeit erhalten Laufdaten und Ghost-Aufnahme; der Lauf wird dabei pausiert. Eine dauerhafte persönliche Rekorddatenbank ist nicht implementiert.
 
 ## Server-Sessions und Aufzeichnung
 
