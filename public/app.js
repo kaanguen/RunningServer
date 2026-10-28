@@ -1,6 +1,6 @@
 const $ = selector => document.querySelector(selector);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let userSpeedDraft={source:'FixedTest',speedKmh:10},userSpeedPending=false;
+let userSpeedDraft={source:'FixedTest',speedKmh:10},userSpeedPending=false,ghostSpeedPending=false;
 const defaults = { paceSeconds: 360, mode: 'TempoPartner', showTrack: true };
 let draft = { ...defaults };
 try {
@@ -66,7 +66,7 @@ function treadmill() {
   + card('Laufsteuerung',`<div class="buttons"><button data-run="start" class="primary">Lauf starten</button><button data-run="pause">Pause</button><button data-run="resume">Fortsetzen</button><button data-run="stop">Stoppen</button><button data-run="reset">Laufdaten zurücksetzen</button></div><p id="run-feedback" class="help" role="status"></p><p class="help">Die Brille bestätigt jeden Befehl. Bei Verbindungsabbruch pausiert der Lauf.</p>`,true)
   + card('Live auf der 400-m-Bahn',`<div class="live-track-wrap"><svg id="live-track" viewBox="0 0 400 210" role="img" aria-label="Live-Positionen auf der virtuellen Laufbahn"><path id="live-route" d="M275 45 A60 60 0 0 1 275 165 L125 165 A60 60 0 0 1 125 45 Z" fill="#202b3b" stroke="#536b8d" stroke-width="22"/><path d="M275 45 A60 60 0 0 1 275 165 L125 165 A60 60 0 0 1 125 45 Z" fill="none" stroke="#899bb5" stroke-width="1.5"/><line x1="275" y1="31" x2="275" y2="59" stroke="#b1bfd2" stroke-width="2"/><text x="200" y="99" text-anchor="middle" fill="#b1bfd2" font-size="13">400 m</text><text id="live-track-state" x="200" y="119" text-anchor="middle" fill="#b1bfd2" font-size="10">Warte auf Live-Daten</text><circle id="live-ghost" r="10" fill="#f09665" stroke="#899bb5" stroke-width="2" hidden/><circle id="live-user" r="5" fill="#409cff" stroke="#899bb5" stroke-width="2" hidden/></svg></div><div class="track-legend"><span><i class="user-dot"></i>Du</span><span><i class="ghost-dot"></i>Ghost</span><span id="live-freshness">Keine Positionsdaten</span></div><div class="metric-grid" id="ghost-metrics"></div><p class="help">Virtuelle Positionen entlang der Bahn, keine GPS-Ortung. Aktualisierung durch die Brille.</p>`,true,'LIVE')
   + card('Ghost-Geschwindigkeit testen',`<form id="ghost-speed-form"><label for="ghost-speed">Testgeschwindigkeit · km/h</label><div class="ghost-speed-controls"><input id="ghost-speed" type="number" min="0" step="any" value="10" inputmode="decimal" required><button id="ghost-speed-apply" type="submit" class="primary">Testtempo übernehmen</button><button id="ghost-speed-auto" type="button">Zurück zur Bestzeit</button></div></form><p id="ghost-mode-status" class="help" role="status">Warte auf Ghost-Telemetrie.</p><p class="help">Im Testmodus bewegt sich der Ghost mit deinem Testtempo unabhängig von der Bestzeit. 0 km/h hält ihn an. Pause und Stoppen pausieren auch den Ghost. Aufgezeichnete Bestzeiten bleiben erhalten.</p>`,true,'TESTMODUS')
-  + card('Deine Rekordzeiten',`<div class="metric-grid" id="record-metrics"></div><p id="record-status" class="help" role="status"></p><p class="help">Gemessene Bestzeiten dieser App-Session. Zielpace und Beispielzeiten zählen nicht als Rekord. Beim Zurücksetzen oder Neukonfigurieren des Laufs werden die Werte gelöscht.</p>`,true,'BESTZEITEN')
+  + card('Deine Rekordzeiten',`<div class="metric-grid" id="record-metrics"></div><p id="record-status" class="help" role="status"></p><p class="help">Gemessene Bestzeiten dieser App-Session. Zielpace und Beispielzeiten zählen nicht als Rekord. Nur „Laufdaten zurücksetzen“, ein Umgebungswechsel oder ein App-Neustart löschen diese Werte. Änderungen an Pace, Modus und Bahnsichtbarkeit erhalten die Bestzeit.</p>`,true,'BESTZEITEN')
   + card('Live-Status' ,'<div class="metric-grid" id="treadmill-metrics"></div><p class="help">Live-Werte erscheinen erst, wenn MarkerML2 seine Laufband-Telemetrie liefert.</p>',true,'HEADSET');
 }
 function sensors() {
@@ -209,7 +209,7 @@ function bind() {
   on('send-settings',async()=>{
     if(settingsPending)return;
     const next=readDraft();if(!next){$('#settings-form').reportValidity();return;}
-    if(!window.confirm('Einstellungen auf die Brille anwenden? Die aktuelle Laufstatistik und die Rekorde werden beim Neukonfigurieren zurückgesetzt.'))return;
+    if(!window.confirm('Einstellungen auf die Brille anwenden? Der Lauf wird pausiert. Laufdaten und die aufgezeichnete Bestzeit bleiben erhalten.'))return;
     const submitted=JSON.stringify(next);
     settingsPending=true;settingsFeedback='Wird angewendet · warte auf Bestätigung der Brille …';
     $('#save-state').textContent=settingsFeedback;updateLive();
@@ -252,15 +252,9 @@ function bind() {
     event.preventDefault();
     const input=$('#ghost-speed'), speedKmh=Number(input.value);
     if(!input.reportValidity()||!Number.isFinite(speedKmh)||speedKmh<0) return;
-    try {
-      await api('command',{commandType:'runningMate.setGhostSpeed',commandPayload:{speedKmh}});
-      notice('Testtempo gesendet · warte auf Bestätigung der Brille.');
-    } catch(e){notice(e.message);}
+    await changeGhostSpeed(speedKmh);
   };
-  on('ghost-speed-auto',async()=>{
-    await api('command',{commandType:'runningMate.setGhostSpeed',commandPayload:{speedKmh:null}});
-    notice('Bestzeitmodus angefordert · warte auf Bestätigung der Brille.');
-  });
+  on('ghost-speed-auto',()=>changeGhostSpeed(null));
   if($('#placement-form')) {
     $('#placement-form').onsubmit=event=>{
       event.preventDefault();if(!$('#placement-form').reportValidity())return;
@@ -318,6 +312,24 @@ function updateRecords(run,isML2) {
   const live=isML2&&connected&&Date.now()-lastTelemetryAt<5000;
   $('#record-status').textContent=!available?(live?'Rekord-Telemetrie fehlt · aktualisierte App installieren.':'Warte auf Rekordzeiten von der Brille.'):live?'Live aus der Brille · min:ss,Zehntel':'Zuletzt empfangene Werte · aktuell keine Live-Verbindung.';
 }
+function hasGhostRecording(run) {
+  return run.ghost?.hasRecording===true || run.ghost?.recordedLap===true || Number.isFinite(run.records?.bestLapSeconds);
+}
+function ghostPlaybackStatus(run) {
+  const ghost=run.ghost;
+  const source=hasGhostRecording(run)?'aufgezeichnete beste Runde':`Zielpace ${paceText(run.paceSeconds||defaults.paceSeconds)} min/km · noch keine vollständige Runde aufgezeichnet`;
+  const mode=ghost?.testMode?`Testmodus aktiv · ${Number(ghost.testSpeedKmh).toLocaleString('de-DE')} km/h eingestellt. Rückwechsel verwendet ${source}.`:`${hasGhostRecording(run)?'Bestzeitmodus':'Zielpacemodus'} aktiv · ${source}.`;
+  return mode+(run.state==='Running'?(ghost?.active?'':' Ghost derzeit inaktiv.'):' Lauf pausiert · Starten oder Fortsetzen bewegt den Ghost.');
+}
+async function changeGhostSpeed(speedKmh) {
+  if(ghostSpeedPending)return;
+  ghostSpeedPending=true;updateLive();
+  try {
+    await confirmedCommand('runningMate.setGhostSpeed',{speedKmh});
+    notice(speedKmh===null?'Rückwechsel von der Brille bestätigt. Ohne aufgezeichnete Runde gilt die Zielpace; ein pausierter Lauf bleibt pausiert.':'Ghost-Testtempo von der Brille bestätigt.');
+  } catch(error) {notice(error.message);}
+  finally {ghostSpeedPending=false;updateLive();}
+}
 function updateGhostLive(run,isML2) {
   if(!$('#live-track')) return;
   const ghost=run.ghost, fresh=isML2&&connected&&lastTelemetryAt>0&&Date.now()-lastTelemetryAt<5000;
@@ -342,8 +354,9 @@ function updateGhostLive(run,isML2) {
     +metric('GHOST-TEMPO',fresh&&ghost?.active?fmt(ghost.speedKmh):null,'km/h')
     +metric('DEIN VORSPRUNG',fresh&&ghost?.active?fmt(ghost.gapMetres):null,'m');
   const supported=fresh&&state.registry?.commands?.includes('runningMate.setGhostSpeed');
-  for(const id of ['ghost-speed-apply','ghost-speed-auto']) $('#'+id).disabled=!supported;
-  $('#ghost-mode-status').textContent=!fresh?'Keine aktuellen Ghost-Daten.':!supported?'Für diese Funktion muss die aktualisierte App auf der Brille installiert sein.':ghost?.testMode?`Testmodus aktiv · ${fmt(ghost.testSpeedKmh)} km/h eingestellt · Bestzeitsteuerung aus.`:`Bestzeitmodus aktiv${ghost?.recordedLap?' · aufgezeichnete beste Runde':' · Zielpace bis zur ersten Bestzeit'}.${ghost?.active?'':' Ghost derzeit inaktiv.'}`;
+  for(const id of ['ghost-speed-apply','ghost-speed-auto']) $('#'+id).disabled=!supported||ghostSpeedPending;
+  $('#ghost-speed-auto').textContent=hasGhostRecording(run)?'Zurück zur Bestzeit':'Zurück zur Zielpace';
+  $('#ghost-mode-status').textContent=ghostSpeedPending?'Warte auf Bestätigung der Brille …':!fresh?'Keine aktuellen Ghost-Daten.':!supported?'Für diese Funktion muss die aktualisierte App auf der Brille installiert sein.':ghostPlaybackStatus(run);
 }
 function drawSweetSpot() {
   if(!$('#sweet-avatar'))return;

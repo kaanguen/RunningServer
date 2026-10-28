@@ -109,3 +109,16 @@ test('graceful shutdown finalizes an active recording',async t=>{
   const meta=JSON.parse(await readFile(join(f.directory,id,'session_meta.json'),'utf8'));
   assert.ok(meta.stoppedAt);assert.equal(meta.reason,'server_shutdown');
 });
+
+test('relays ghost best-lap return with explicit null and propagates headset confirmation',async t=>{
+  const f=await fixture(t), dashboard=await f.connect('dashboard'), headset=await f.connect('headset');
+  for(const speedKmh of [10,null]) {
+    const response=await f.request('command',{commandType:'runningMate.setGhostSpeed',commandPayload:{speedKmh}});
+    assert.equal(response.status,202);
+    const command=await headset.next(m=>m.type==='command');
+    assert.equal(Object.hasOwn(command.commandPayload,'speedKmh'),true);
+    assert.equal(command.commandPayload.speedKmh,speedKmh);
+    headset.send({type:'ack',commandId:command.commandId,success:true});
+    assert.equal((await dashboard.next(m=>m.type==='ack'&&m.commandId===command.commandId)).success,true);
+  }
+});
