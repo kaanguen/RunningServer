@@ -1,495 +1,137 @@
-# Avatar VOS — Dashboard & Server
+# RunningServer
 
-A browser-based remote control panel for the Avatar VOS experience running on Magic Leap 2.
-You open the dashboard on any computer or tablet on the same Wi-Fi network, and it lets you control everything about the avatar in real time — where it stands, how it moves, what it looks like, and how it reacts to the person wearing the headset.
+ML2 Projekt
 
----
+**Stand: 27.10.2026.** Lokaler Node.js-Server für die Magic-Leap-2-App MarkerML2. Er liefert das Dashboard aus, leitet Befehle an die Brille weiter, verteilt deren Live-Daten und verwaltet Server-Sessions sowie Aufzeichnungen.
 
-## Implementation status and target platform
+Die Unity-App berechnet Marker-/Plane-Platzierung, Bewegung, Ghost und Rekorde. Die Webseite allein aktualisiert diese Funktionen nicht auf der Brille: Neue Unity-Befehle verlangen einen neuen App-Build.
 
-The Node.js service and browser dashboard are implemented in this repository for **Magic Leap 2**. The service serves the dashboard, forwards commands to one connected headset, broadcasts telemetry to multiple dashboards, tracks acknowledgements, and records sensor data and commands locally.
+## Was wird benötigt?
 
-The **Unity headset application is a separate integration** and is not included here. Tracking, marker calibration, avatar behavior, rendering and BLE sensor access must be implemented by that application. The new [WebSocket protocol and command catalog](docs/PROTOCOL.md) define the integration contract used by this service. No existing Unity `AvatarFSM.md` was available to verify payload compatibility.
+- Node.js **22 oder neuer** und npm auf dem Serverrechner.
+- Magic Leap 2 mit installierter MarkerML2-App.
+- USB-Datenverbindung mit ADB oder ein erreichbares gemeinsames Netzwerk.
+- Ein zur App passender AprilTag: aktuelle Szene **36H11**, konfigurierte Kantenlänge **10 cm**, flach auf dem Boden.
+- Auf der Brille erlaubtes Marker Tracking und Spatial Mapping sowie gültiges Headtracking.
 
-- Use Node.js 22 or newer.
-- Configure the Unity client with `ws://<server-LAN-IP>:8081/ws` and send a `hello` message with role `headset` before sending registry or telemetry.
-- The dashboard uses headset-neutral labels. Automatic lighting calibration is enabled only if the client advertises `ambientLightCalibration` support; ARKit is not used by this service.
-- This is an unauthenticated, trusted-LAN service. Do not expose it directly to the internet.
+Die vollständige Anwendungsanleitung liegt im Unity-Projekt unter `/Users/kaan/Unity Projekte/MarkerML2/README.md`. Das aktuelle Protokoll steht in [docs/unity-protocol.md](docs/unity-protocol.md).
 
-## Quick start
-
-```bash
-npm install        # first time only
-node server.js
-```
-
-Open a browser and go to the address printed in the terminal, for example:
-
-```
-http://192.168.1.42:8081
-```
-
-Open `http://localhost:8081` on the server computer. Use the printed LAN address from other devices. The Magic Leap 2 app must be configured to connect to the same server address over WebSocket and implement the [protocol](docs/PROTOCOL.md).
+## Server starten
 
 ```bash
-npm test              # integration tests (HTTP, WebSocket, recording)
-npm run simulate      # separate terminal: synthetic headset for testing
+cd /Users/kaan/RunningServer
+npm install
+npm start
 ```
 
-The simulator supplies synthetic telemetry and acknowledges only its implemented command subset; other commands explicitly fail. Stop it before connecting a physical headset. A successful simulator test does not verify Magic Leap hardware integration.
+`npm install` ist nur bei fehlenden oder geänderten Abhängigkeiten nötig. Das Terminal für den laufenden Server geöffnet lassen. Stoppen mit **Ctrl+C**.
 
-Configure the server with `PORT` and `HOST` if needed, for example `PORT=8081 HOST=127.0.0.1 npm start`. By default it listens on all interfaces on port 8081.
+Dashboard: **http://localhost:8081/**
 
-```text
-server.js                    HTTP API, WebSocket relay, recording
-public/                      dashboard (HTML, CSS, JavaScript)
-scripts/simulate-headset.js   synthetic integration client
-test/service.test.js         service integration tests
-docs/PROTOCOL.md             Unity client contract
-recordings/                  runtime data (git-ignored)
+Der Standardport ist 8081. Port 8080 wurde auf diesem Rechner bereits von Unity MCP verwendet. Ein anderer Port lässt sich mit `PORT` setzen; die Adresse in der App und gegebenenfalls die USB-Weiterleitung müssen dann ebenfalls passen.
+
+```bash
+PORT=8082 npm start
 ```
 
----
+`HOST` überschreibt die standardmäßige Bindung an `0.0.0.0`. Der Server ist für das lokale Netzwerk gedacht und besitzt keine Anmeldung/TLS; ihn nicht öffentlich ins Internet freigeben.
 
-## How it works
+## Brille verbinden
 
-```
-┌─────────────────┐        WebSocket        ┌──────────────────┐
-│  Dashboard      │ ◄─────────────────────► │  Node.js server  │
-│  (browser)      │      (port 8081)         │  server.js       │
-└─────────────────┘                          └────────┬─────────┘
-                                                      │ WebSocket
-                                             ┌────────▼─────────┐
-                                             │ Magic Leap 2 app │
-                                             │     (Unity)      │
-                                             └──────────────────┘
+### Über USB
+
+Developer Mode und USB debugging auf der Magic Leap aktivieren, Compute Pack anschließen und die Debugging-Freigabe in der Brille bestätigen. Auf dem Mac:
+
+```bash
+adb devices
+adb reverse tcp:8081 tcp:8081
 ```
 
-- The **dashboard** (this web page) connects to the server over WebSocket and sends commands when you press buttons or move sliders.
-- The **server** receives those commands and forwards them to the Magic Leap 2 headset.
-- The **Magic Leap 2 app** receives commands, moves the avatar, and sends back live telemetry (position, state, sensor readings).
-- Everything is broadcast — multiple dashboards can be open at the same time and all stay in sync.
+Die App verwendet dabei `ws://127.0.0.1:8081/ws`. Das funktioniert auf der Brille durch die Portweiterleitung zum Mac. Bei `unauthorized` die Freigabe bestätigen. Bei mehreren Geräten `adb -s <Seriennummer> ...` verwenden. USB angeschlossen lassen und die Weiterleitung nach einem Neustart erneut setzen.
 
----
+### Über WLAN
 
-## Status bar (top of every page)
-
-The coloured dots at the top tell you the current connection state at a glance.
-
-| Dot | What it means |
-|-----|---------------|
-| **WS** | Dashboard is connected to the server |
-| **Headset** (legacy label: **AVP**) | The Magic Leap 2 headset is connected to the server |
-| **Avatar** | An avatar is currently in the scene |
-| **Floor** | Floor marker ("Marker A") has been calibrated |
-| **Dir B** | The second marker ("Marker B") / heading has been calibrated — used by the Running Mate stadium setup to know which way the track runs |
-| **BLE** | A Bluetooth health sensor (Polar) is connected |
-| **REC** | A recording session is active |
-
-The **avatar ID chip** shows which avatar all commands are currently targeting.
-The **Last Ack** area shows whether the last command succeeded or failed.
-
----
-
-## Tab: Avatar
-
-Everything about where the avatar stands and how it moves.
-
-### Avatar ID
-
-Each avatar has a unique ID (like `alex_v1`). When the Magic Leap 2 connects it sends a list of available avatars — buttons appear automatically. Click one to select it, or type an ID manually.
-
-### Spawn / Despawn
-
-**Spawn** places the avatar in the scene. Before spawning you choose:
-
-- **Start locomotion** — how the avatar moves when it first appears (see Locomotion modes below)
-- **Start behavior** — how it acts when it first appears (see Behavior states below)
-
-**Despawn** removes the avatar from the scene completely.
-
-**Spawn on Object** — type the exact name of a physical object in the Unity scene and the avatar appears on top of it.
-
-### Sweet Spot Placement
-
-The "sweet spot" is the ideal position where the avatar should stand relative to the person in the headset.
-
-| Control | What it does |
-|---------|-------------|
-| **Position** | Which side of the user the avatar stands on — N = in front, S = behind, E = right, W = left, etc. This direction is locked to where the user was looking when the avatar was spawned. |
-| **Facing** | Which way the avatar looks — Face User (looks at you), Back To User, Left Shoulder, Right Shoulder |
-| **Distance** | How far away the avatar stands (metres) |
-| **Pos Tol** | How precisely the avatar tracks its target — smaller = more precise but more movement |
-| **Smooth** | How gradually the target position updates as the user moves |
-| **Reposition** | Instantly move the avatar to the ideal spot in front of the user right now, and lock it there. Also resets the reference direction. |
-
-### Turning
-
-Controls when and how the avatar turns to face the user.
-
-| Control | What it does |
-|---------|-------------|
-| **Tolerance** | Angle the avatar ignores — small head movements within this range cause no reaction |
-| **Trigger** | How far off-axis the user needs to stand before a turn-step animation plays |
-| **Delay** | How long the user needs to be misaligned before the avatar reacts |
-| **Residual** | How fast the avatar quietly corrects tiny leftover angles after a turn, without a full step animation |
-
-### Movement
-
-Controls walking speed and distance when the avatar is following the user.
-
-| Control | What it does |
-|---------|-------------|
-| **Speed** | Walking speed (metres per second) |
-| **Back ×** | Speed when stepping backward, as a fraction of forward speed |
-| **Anim ×** | Walk animation playback speed — adjust to match animation to actual speed |
-| **Stop at** | Personal space boundary — avatar stops walking this close to the user |
-| **Follow delay** | (Reaction mode only) How long the user must stay in a new spot before the avatar walks to follow. Higher = more natural companion feel. |
-| **Lock Y** | Keep the avatar planted on the floor — prevents floating or sinking |
-
-### Reaction Gate
-
-A distance window that controls when the avatar is "active" vs. "idle" in Reaction mode.
-
-| Control | What it does |
-|---------|-------------|
-| **Min** | Inside this distance the avatar ignores the user (prevents it reacting when you're right next to it) |
-| **Max** | Beyond this distance the avatar also ignores the user |
-| **Hyst** | A small safety buffer that stops the avatar flickering at the edge of the zone |
-
-### Step Back on Touch
-
-When enabled, if the user walks too close the avatar plays a step-back animation.
-
-| Control | What it does |
-|---------|-------------|
-| **Enable on touch** | Turn the step-back reflex on or off |
-| **Touch** | How close the user needs to walk before the step-back triggers |
-| **Dist** | How far the avatar steps back |
-| **Anim ×** | How fast the step-back animation plays |
-
-### Sweet Spot Diagram
-
-A live bird's-eye diagram that visualises all the placement parameters at once.
-Updates instantly as you move the sliders. Useful for understanding how the different zones relate to each other.
-
----
-
-## Tab: Behavior
-
-Controls the avatar's personality and how it moves around.
-
-### Behavior State
-
-The behavior state controls *how* the avatar acts. Only one state is active at a time.
-
-| State | What it does |
-|-------|-------------|
-| **Idle** | Avatar stands completely still — does not turn or react |
-| **Exercise** | Avatar performs an exercise animation in place — does not follow or turn |
-| **Turn In Place** | Avatar turns to face you once and holds — stays at its anchor, does not follow |
-| **Reaction** | Full companion mode — turns to face you, follows at a comfortable distance, steps back if you get too close. **Default after spawning.** |
-| **Stimulus** | Freezes the avatar — no behavior or movement changes are allowed until released. Used for triggered events like pain reactions. |
-
-Priority order: **Stimulus > Reaction > TurnInPlace > Exercise > Idle**
-
-### Locomotion Mode
-
-The locomotion mode controls *where* the avatar moves. It works independently of the behavior state.
-
-| Mode | What it does |
-|------|-------------|
-| **Locked In Place** | Avatar stays pinned at its current position. Use Reposition to move it. |
-| **Sweet Spot Follow** | Avatar continuously walks to stay at the sweet spot as the user moves around |
-| **Approach User (sustained)** | Avatar keeps pace with the user, always staying at the stop distance. Stays active until you change mode. |
-| **Go to User (one-shot)** | Avatar walks to the user once, stops at the personal boundary, then locks in place. Uses the dedicated GotoUser walk animation. |
-| **Step-back toggle** | Quickly enable or disable the step-back reflex |
-
-> **Note:** Some behavior + locomotion combinations don't work together. The dashboard disables the unavailable options automatically and shows an explanation when this happens.
-
-### Shader
-
-Switch the avatar's visual appearance. Buttons are auto-populated from the catalog when the headset connects.
-
-### Thermal
-
-Control the thermal body shader — shows the avatar's body as a heat map, like a thermal camera.
-
-| Control | What it does |
-|---------|-------------|
-| Preset buttons | Quick presets: Normal Body, Fever, Hypothermia, Cold/Warm Ambient, High Contrast, FLIR |
-| **Temperature slider** | Manually set a sensor temperature (°C) and push it to the avatar |
-
-### Animation
-
-Play one of the avatar's looping expressive animations. Buttons are auto-populated when the headset connects. You can also type an exact animator state name and press Play.
-
-### Head Look
-
-Toggle whether the avatar's head tracks the user's position in real time.
-
-### TV Static
-
-Apply a TV static / noise shader to the avatar — useful for glitch effects.
-
-
----
-
-## Tab: Status & Sensors
-
-A read-only overview of the current state of everything.
-
-### Avatar State
-
-Shows the current behavior state, locomotion mode, and other avatar settings as reported back from the headset. Updates live.
-
-### BLE Health Sensor
-
-Live readings from a connected Bluetooth sensor (Polar ring or similar).
-
-| Metric | What it shows |
-|--------|--------------|
-| **HR** | Heart rate (beats per minute) |
-| **Temp** | Body temperature (°C) |
-| **SpO₂** | Blood oxygen saturation (%) |
-| **PR** | Pulse rate from oximeter |
-| **PI** | Perfusion index — ratio of pulsatile to non-pulsatile blood flow |
-
-**Connect / Disconnect** buttons start and stop the Bluetooth scan.
-
-### Session Recording
-
-Start and stop recording sessions. When recording is active, all BLE sensor data, exercise detections, and commands sent are written to a timestamped folder in `recordings/` on the server.
-
----
-
-## Tab: Exercises
-
-Live display of exercise detection results. The app analyses the user's movements in real time and rates each exercise profile for confidence and intensity.
-
-Each card shows:
-- **Confidence** — how well the current movement matches the exercise
-- **Intensity** — how strongly the movement is expressed (drives healing / visual effects on the avatar)
-- **Frequency / Amplitude** — raw signal characteristics
-- **Active** indicator — lights up green when this profile is the top match
-
-Use the **Active Profile** selector to manually override which exercise profile is active.
-
----
-
-## Tab: Scene
-
-Control the lighting and shadow in the scene.
-
-### Scene Lighting
-
-| Control | What it does |
-|---------|-------------|
-| Preset buttons | Quick lighting setups — Natural, Overhead, Left/Right, Front, Rim, Dim, Off |
-| **Pitch** | Elevation angle of the light — negative = from above |
-| **Yaw** | Horizontal angle — 0 = front, 90 = right |
-| **Intensity** | Brightness (0 = off, 1 = normal, 3 = very bright) |
-| **Color** | Light tint colour |
-| **Calibrate** buttons | Request ambient light calibration; the Unity client must provide a Magic Leap 2-compatible implementation before this control is enabled |
-
-### Shadow
-
-Toggle and fine-tune the grounding shadow plane beneath the avatar.
-
-### HUDs in the headset
-
-The person in the headset sees floating information panels (HUDs) around them — for example a stadium/lap panel, or debug read-outs. This card lets you show or hide each of those panels remotely.
-
-The buttons are **auto-discovered**: the headset broadcasts a list of every registered panel when it connects, and one button appears per panel. A **highlighted button means the panel is currently visible** on the headset; click to toggle it. If the list is empty you'll see "waiting for AVP HUD registry" until the headset reports in.
-
-> The same show/hide capability also appears inside the feature tabs it belongs to (for example the Running Mate tab has its own **Headset HUD** (legacy label: **AVP HUD**) show/hide for the stadium panel), so you can control a panel from wherever you happen to be working.
-
----
-
-## Tab: Running Mate
-
-A "virtual running coach" mode: a coach avatar runs laps on a **real athletics track** at a target pace, so the person wearing the headset can chase it or pace off it. Because the coach has to line up with the actual painted lanes of a physical stadium, this tab is mostly about **calibrating** the app to the real track, then **configuring and running** the coach.
-
-The tab has two sub-views, switched by the **Controls** / **Track view** buttons at the top:
-
-- **Controls** — all the setup and run buttons (default).
-- **Track view** — a full-page bird's-eye stadium diagram showing the coach's live position.
-
-### Stadium calibration (the two-marker setup)
-
-Before the coach can run in the right place, the app needs to learn two things about the real track: **where the start line is** and **which direction the lane runs**. You teach it this by looking at two physical spots, in order:
-
-1. **Marker A** — stand on the finish/start line in lane 1 and look down at the floor until the **Floor** status dot turns green. This anchors the track's origin.
-2. **Marker B** — walk ~15–30 m further along the *same* lane in the running direction (counter-clockwise) and look at that spot for a couple of seconds until the **Dir B** dot turns green. The line from A to B tells the app which way the track is oriented ("run yaw").
-3. Turn on **Ground path** (see Run controls) and walk the lane — the white guide lines drawn on the floor should sit neatly between the real painted lines. If they drift, re-place Marker B further away for a longer, more accurate baseline.
-
-The panel shows the live calibration read-out: **Marker A**, **Marker B**, the **Baseline** distance between them, and the resulting **Run yaw** (heading angle).
-
-### Fine adjust path
-
-Even after calibration, the virtual lanes can be a few centimetres or degrees off the real paint. These buttons nudge the whole path without re-doing calibration:
-
-| Row | What it does |
-|-----|-------------|
-| **Along track** | Slide the path forward/backward along the running direction (±1 cm / ±10 cm steps) |
-| **Across track** | Slide the path sideways, toward or away from the infield (±1 cm / ±10 cm) |
-| **Heading** | Rotate the whole path a fraction of a degree either way (±0.5° / ±1°) |
-| **Reset** | Clear all nudges and return to the raw calibrated path |
-
-The running **Offset** total (e.g. `5cm · -2cm · 0.5°`) is shown so you can see how far you've adjusted.
-
-### Config
-
-Defines *who* runs, *where*, and *how fast*. Press **Configure** to validate and apply it on the headset; the acknowledgement line reports the computed lap length, speed, and animation multiplier (or an error).
-
-| Control | What it does |
-|---------|-------------|
-| **Avatar** | Which coach avatar to use. It must have a looping "Run" animation. The list auto-fills from the headset's catalog; `coach_default_01` is the default. |
-| **Mode** | The pacing strategy — **Target Pacer** runs at a pace you set; **Previous Time Pacer** re-runs a previously recorded lap time so the runner can race their past self |
-| **Lane (1–8)** | Which lane the coach runs in (1 = innermost/shortest, 8 = outermost/longest). The lane changes the lap distance. |
-| **Start slot (0–7)** | Where on the track the coach starts, in eighths of a lap. Each slot shows a plain-language hint and, where relevant, the sign painted on a real track at that spot (e.g. slot 0 = "ZIEL · Start 400m Bahn 1"). |
-| **Target time / Previous time** | Time to complete one lap. Accepts either plain seconds (`80`) or `mm:ss` (`1:20`). The label changes to match the selected mode. |
-| **Anim name** | The animator state to play while running (default `Run`) |
-| **Ref speed (m/s)** | The speed the run animation was authored for. The app scales the footstep cadence up or down from this so the feet match the actual running speed. |
-
-### Run controls
-
-Drive the coach once it's configured:
-
-| Button | What it does |
-|--------|-------------|
-| **Spawn** | Place the coach at the chosen lane/slot, standing still |
-| **Start** | Begin running at the configured pace |
-| **Pause** / **Resume** | Freeze the coach in place / continue — lap timing stays accurate across a pause |
-| **Stop** | Stop running but leave the coach where it is |
-| **Reset** | Snap the coach back to the start slot, ready to Start again |
-| **Despawn** | Remove the coach entirely |
-
-Below the buttons are three live tuning/visibility controls:
-
-| Control | What it does |
-|---------|-------------|
-| **Anim ×** | Live "foot-skate" fix. While the coach runs, drag this until the planted foot stops sliding on the floor. **Auto** clears the manual override and goes back to the calculated speed. |
-| **Headset HUD** (legacy label: **AVP HUD**) | Show/hide the floating stadium panel *inside the headset* |
-| **Ground path** | Show/hide the lane guide lines drawn on the real floor — use it to check calibration by walking the lane |
-
-### Status
-
-A live read-out from the coach: current **State**, the **Anchor** source (which marker the position is based on), **Lap length**, **Speed**, **Elapsed** time, **Distance** covered, and **Laps** completed.
-
-### Track view
-
-A full-page top-down stadium graphic that updates in real time:
-
-- **Cyan dot** — the coach's live position on the track
-- **Yellow ring** — the selected start slot
-- **Yellow dashed line** — the selected lane
-- The whole diagram **rotates to match the real track's heading**, so it lines up with what you'd see standing at the marker.
-
----
-
-## Log panel (right side)
-
-A real-time log of all commands sent and messages received. Useful for debugging.
-Use the **Auto-scroll**, **Clear**, and **Copy** buttons at the top.
-Click the arrow button to collapse the log panel and give more space to the controls.
-
----
-
-## Recordings
-
-Recording files are saved in `recordings/<timestamp>/` on the server:
-
-| File | Contents |
-|------|----------|
-| `ble_data.csv` | BLE sensor readings with timestamps |
-| `exercise_detections.csv` | Exercise profile detections with timestamps |
-| `commands.jsonl` | All commands sent during the session |
-| `session_meta.json` | Session ID and metadata |
-
----
-
-## Sending commands manually
-
-Every button and slider in the dashboard sends a JSON command to the server via HTTP POST to `/api/command`, which the server forwards to the headset over WebSocket.
-
-A command looks like this:
+Beim Serverstart die ausgegebene LAN-IP ablesen. In der Unity-Datei `Assets/Resources/RunnerServer.json` eintragen und die App neu bauen/installieren:
 
 ```json
 {
-  "commandType": "avatar.setBehaviorState",
-  "targetId": "alex_v1",
-  "commandPayload": {
-    "behaviorState": "Reaction"
-  }
+  "serverUrl": "ws://<LAN-IP-des-Serverrechners>:8081/ws"
 }
 ```
 
-You can send commands directly from any tool (curl, Postman, your own code):
+`localhost` auf der Brille bezeichnet die Brille, nicht den Mac. Die Datei `runner-server.json` im `Application.persistentDataPath` der App kann die im Build hinterlegte Adresse überschreiben.
+
+## App bedienen
+
+1. App aufsetzen/öffnen und auf den verbundenen MarkerML2-Status warten.
+2. Bodenmarker scannen und die Plane um den Marker erfassen. Bahn und Avatar erscheinen automatisch auf der erkannten Bodenhöhe; Startbahn ist **3**. Keine Körpergrößeneingabe nötig.
+3. **An Brille senden** überträgt Ghost-Zielpace, Avatar-Modus und Streckensichtbarkeit. Das setzt die Session-Statistik zurück. **Lokal speichern** speichert nur einen Browserentwurf.
+4. Nutzertempo auswählen und übernehmen. Feste Test-km/h simulieren den Nutzer. Die Laufbandquelle ist für spätere Sensordaten vorbereitet und liefert ohne Signal 0 km/h.
+5. **Lauf starten** startet eine gültig platzierte Session. **Pause**, **Weiter**, **Stoppen** und **Lauf zurücksetzen** sind getrennte Aktionen.
+
+### Bereiche
+
+| Bereich | Funktionen |
+| --- | --- |
+| Laufband | Session-Konfiguration, Nutzertempo, Laufsteuerung, Live-Bahnkarte, Ghost-Testtempo und Rekorde |
+| Kalibrierung | Marker-/Plane-Status, erneutes Scannen, Umgebung, Avatar-Bahn 1–8, A/B-Stadionkalibrierung, Sweet Spot und Feinversätze |
+| Sensoren & Session | BLE-Verbindungsstatus, Server-Session und Aufzeichnung |
+| Log | Verbindungen, gesendete Befehle und Bestätigungen der Brille |
+
+### Nutzer und Avatar haben getrennte Geschwindigkeiten
+
+- **Nutzer-Testtempo:** feste Nutzer-km/h; die virtuelle Welt bewegt sich bei räumlich stehendem Nutzer.
+- **Laufbandquelle:** später gemessene Bandgeschwindigkeit. Ohne aktuelle Werte bzw. nach zwei Sekunden ohne gültiges Signal: 0 km/h Nutzerfortschritt. Ein echter Hardware-Adapter ist noch nicht implementiert.
+- **Tempo-Partner:** eigene Zielpace, Bestzeitprofil oder Ghost-Testtempo. Er läuft in einer gestarteten Session weiter, auch wenn das Nutzertempo 0 ist oder auf Laufbanddaten umgestellt wird. Seine eigene Runden-Uhr lässt ihn auch über Rundengrenzen weiterlaufen, ohne auf den Nutzer zu warten.
+- **Side by Side:** bleibt relativ beim Nutzer; seine Laufanimation verwendet die eingestellte Avatar-Pace unabhängig vom Laufbandsignal.
+
+Der Wechsel der Nutzerquelle pausiert den Avatar nicht. Explizite Pause/Stoppen und ein Verbindungsabbruch frieren die Session weiterhin ein. Vor „Lauf starten“ steht der automatisch erschienene Avatar still.
+
+Die neue Nutzerquellen-Auswahl und die unabhängige Pace-Anpassung sind im Quellcode/Dashboard vorhanden, aber noch nicht im zuletzt auf der Brille geprüften Marker-Build enthalten. Bis zur Installation eines neuen Builds sind entsprechende Knöpfe deaktiviert.
+
+### Avatar-Bahn und Stadionkalibrierung
+
+Die Bahnwahl 1–8 gilt für beide Avatar-Modi. Automatischer Spawn, erneuter Markerscan und „Lauf starten“ setzen Bahn 3. Danach kann die Bahn geändert werden; „Weiter“ erhält die Auswahl.
+
+Für eine reale Standard-400-m-Bahn **Echte 400-m-Bahn** wählen: Die Welt bleibt fest, Nutzerfortschritt stammt vom Headtracking. Der Umgebungswechsel beginnt eine neue pausierte Session. Nach Marker-/Plane-Platzierung lassen sich Punkt A an der gemeinsamen Start-/Ziellinie von Bahn 1 und Punkt B eine bekannte Strecke von 5–100 m weiter gegen den Uhrzeigersinn erfassen. Die Strecke entlang der Messlinie muss vor Ort bestimmt werden. Die Einpassung verschiebt und dreht das Standardoval ohne Skalierung.
+
+Die ganze Bahn lässt sich entlang/quer mit Zentimeter-/Meter-Schritten oder absoluten Versätzen bis ±100 m sowie mit einer Drehung bis ±180° justieren. Kalibrierungsaktionen pausieren automatisch. Bodenhöhe kommt aus der Plane; manuelle Höhenfelder sind entfernt.
+
+### Ghost und Rekorde
+
+Das Ghost-Testtempo überschreibt nur den Ghost. 0 km/h hält ihn an; **Zurück zur Bestzeit** aktiviert wieder sein normales Ziel-/Bestzeitprofil.
+
+Die Rekordkarte zeigt tatsächlich gemessene vollständige 100-m-, 400-m- und 1-km-Zeiten der aktuellen App-Session. Ziel-/Beispielzeiten zählen nicht. Reset, Neukonfiguration, Umgebungswechsel oder App-Neustart löschen diese Session-Werte. Eine dauerhafte persönliche Rekorddatenbank ist nicht implementiert.
+
+## Server-Sessions und Aufzeichnung
+
+Eine Server-Session anlegen startet keinen Unity-Lauf. Eine Aufnahme kann mit oder ohne benannte Server-Session laufen. Vor dem Beenden einer Session die Aufnahme stoppen.
+
+Unter `recordings/<ID>/` entstehen:
+
+- `ble_data.csv`
+- `exercise_detections.csv`
+- `commands.jsonl`
+- `session_meta.json`
+
+Der aktuelle Unity-Client überträgt BLE-Verbindungsstatus, aber noch keine vollständigen Vitalwert-/Übungsdaten. Leere Sensoraufnahmen sind deshalb möglich. Laufbahnpositionen und Rekorde haben noch keinen eigenen CSV-Export. Beim geordneten Serverstopp wird eine aktive Aufnahme abgeschlossen.
+
+## Entwicklung und Prüfung
 
 ```bash
-curl -X POST http://192.168.1.42:8081/api/command \
-  -H "Content-Type: application/json" \
-  -d '{"commandType":"avatar.setBehaviorState","targetId":"alex_v1","commandPayload":{"behaviorState":"Reaction"}}'
+npm test
+node --check public/app.js
 ```
 
-Common command families:
+`npm test` umfasst sechs HTTP-/WebSocket-Integrationstests. `npm run dev` startet den Server mit Node-Watch. Der vorhandene Headset-Simulator liefert Testdaten und ersetzt keinen Magic-Leap-Gerätetest.
 
-| Prefix | Used by | Examples |
-|--------|---------|----------|
-| `avatar.*` | Avatar / Behavior tabs | `avatar.spawn`, `avatar.setBehaviorState`, `avatar.setMode`, `avatar.configurePlacement`, `avatar.playAnimation` |
-| `scene.*` | Scene tab | `scene.setLight`, `scene.setShadow`, `scene.setHudVisible`, `scene.setRunningMateHudVisible`, `scene.setRunningMatePathVisible` |
-| `sensor.*` | Sensor controls | `sensor.connect`, `sensor.disconnect` |
-| `exercise.*` | Exercises tab | `exercise.setActiveProfile` |
-| `runningMate.*` | Running Mate tab | `runningMate.configure`, `runningMate.command`, `runningMate.adjust`, `runningMate.tune` |
+Die Marker-/Floor-Ray-Platzierung wurde mit Marker 39 auf der Magic Leap bestätigt. Ein vollständiger realer 400-m-Lauf und eine echte Laufband-Anbindung sind noch nicht verifiziert.
 
-See [docs/PROTOCOL.md](docs/PROTOCOL.md) for the implemented command envelope, dashboard payload fields, and telemetry schema. Reconcile these fields with `Instructions/AvatarFSM.md` when integrating an existing Unity project.
+## Fehlersuche
 
----
-
-## API endpoints
-
-| Endpoint | Method | What it does |
-|----------|--------|-------------|
-| `/api/command` | POST | Send a command to the headset |
-| `/api/status` | GET | Current connection state and avatar registry |
-| `/api/registry` | GET | Last received catalog snapshot (avatar IDs, shader names, etc.) |
-| `/api/session/start` | POST | Start a named session |
-| `/api/session/stop` | POST | End the current session |
-| `/api/recording/start` | POST | Start recording to disk |
-| `/api/recording/stop` | POST | Stop the active recording |
-
-## iPad dashboard
-
-The dashboard supports iPad portrait and landscape layouts with touch-sized controls, two-column cards where space allows, and a compact top navigation on tablet widths. The event log starts collapsed; its visibility preference is saved per browser. Heart and liver controls are omitted from the dashboard.
-
-Start the server with `npm start`, connect the iPad to the same local network, and open the printed **LAN** URL in Safari (for example `http://192.168.1.42:8081`). `localhost` on the iPad refers to the iPad itself, not the server computer. Multiple dashboards can connect simultaneously.
-
-
-## MarkerML2: Kalibrierungssteuerung (27.10.2026)
-
-Der aktuelle lokale Dashboard-Tab **Kalibrierung** bietet Sweet-Spot-Platzierung für den SideBySide-Avatar (acht Richtungen, Abstand und Blickrichtung), Rekalibrierung aus Kopfposition/Blickrichtung, Höhenkorrektur und Feinversätze der Laufwelt. Die Seite enthält keine Herz-/Leber-Anzeigesteuerung.
-
-Voraussetzung: pausierte Session, gültiges Headtracking und aktuelle MarkerML2-App. Ohne passende Client-Capabilities bleiben die Knöpfe deaktiviert. Erfolgreiche Verarbeitung wird durch die Brille bestätigt. Laufdistanz, Zeit und Ghost-Aufnahme bleiben bei diesen Kalibrierungsbefehlen erhalten.
-
-Client-Befehle: `avatar.configurePlacement` (`position`, `facing`, `distance`), `avatar.reposition`, `scene.recalibrate` (`includeHeight`), `scene.adjustHeight` (`deltaMetres`), `runningMate.adjust` (absolute `along`, `across`, `heading` oder `reset: true`). Vollständige Rekalibrierung berechnet die Höhe aus der Körpergröße; reine Blickausrichtung erhält die Höhe. Beide entfernen bestehende Feinversätze. Der Ghost folgt weiterhin seiner Bahnposition.
-
-Die früheren generischen Beschreibungen von SweetSpotFollow, Toleranz/Glättung, Reaktionsverhalten und Marker-A/B-Stadionkalibrierung sind kein Funktionsnachweis für den aktuellen MarkerML2-Laufbandclient. In diesem Schritt ist nur die feste Platzierung und Kalibrierung implementiert.
-
-
-## Avatar-Bahnen und echte 400-m-Bahn (27.10.2026)
-
-Unter **Kalibrierung → Avatar-Bahn** gilt die Auswahl 1–8 für Side by Side und Tempo-Partner. Beim Ghost bleibt seine Zeitaufnahme erhalten. Im Laufbandmodus bewegt sich die Welt weiter unter dem Nutzer. **Echte 400-m-Bahn** aktiviert dagegen eine feste XR-Welt und Nutzerfortschritt aus der getrackten Kopfposition.
-
-Die Stadionkalibrierung verwendet zwei Punkte auf der Messlinie von Bahn 1: A an der gemeinsamen Start-/Ziellinie, B eine bekannte, entlang der Bahn ausgemessene Strecke von 5–100 m weiter gegen den Uhrzeigersinn. Standard: 20 m. Das Modell passt seine Verschiebung und Drehung an; es vermisst keine unbekannte Bahnform und skaliert das Standardoval nicht. Höhe aus Körpergröße und Feinausrichtung anschließend am Boden prüfen. Der Wechsel der Laufumgebung beginnt eine neue Session und löscht deren Statistik/Rekorde.
-
-Die ganze Bahn lässt sich danach mit Zentimeter-/Meter-Schritten, Drehkorrektur und direkten absoluten Versätzen (entlang/quer ±100 m, Drehung ±180°) verschieben. Kalibrierungsaktionen pausieren automatisch und verlangen bestätigte Antworten der Brille. Die Session bleibt pausiert.
-
-Wire-Befehle: `runningMate.setLane` (`lane` 1–8), `scene.setTrackEnvironment` (`environment`: Stadium/Treadmill), `scene.captureTrackPoint` (`point`: A/B; bei B `distanceAlongTrack`), vorhandenes `runningMate.adjust` für absolute Feinversätze. Neue Funktionen benötigen eine neu gebaute und installierte MarkerML2-App; die Webseite allein genügt nicht. Tests prüfen Geometrie, Zwei-Punkt-Drehung und Serverrelay. Die vollständige physische 400-m-Runde wurde noch nicht auf dem Gerät verifiziert. Kalibrierung gilt nur für die aktuelle XR-Session.
-
-
-## Start über Bodenmarker und Plane
-
-Die aktuelle MarkerML2-Quelle aktiviert beim Öffnen den Marker-/Plane-Tracker der Laufszene. Laufbahn und Avatar erscheinen erst nach einem aktuellen Bodenmarker und einer passenden getrackten Floor-Plane unter dem Marker. Die erkannte Plane liefert die Höhe; Körpergrößen-/Höhenfelder sind aus dem Dashboard entfernt. Der Avatar erscheint auf Bahn 3 und wartet gestoppt auf den Laufstart. Die Marker- und Spatial-Mapping-Berechtigungen müssen auf der Brille erlaubt werden.
-
-Die aktuelle Szene verwendet AprilTag Dictionary_36H11 mit 0,10 m konfigurierter Kantenlänge. Bei **Bodenmarker neu scannen** pausiert die App und wartet erneut auf den Marker samt Bodenfläche. Telemetrie: `treadmill.markerPlacement` mit `required`, `floorConfirmed`, `markerId`, `status`. Befehl: `scene.rescanMarker` mit leerem Payload. Der alte separate Marker-Avatar wird in der Laufbandszene nicht zusätzlich erzeugt. Zum Verwenden die aktualisierte Unity-App neu bauen/installieren; ein realer Scan ist noch nicht mit diesem Build verifiziert.
+- **Alter Seitenstand:** korrekten Serverordner und Port verwenden, Webseite neu laden.
+- **Neue Funktion deaktiviert:** Brillenverbindung und gemeldete Client-Befehle prüfen; App gegebenenfalls neu bauen/installieren.
+- **Marker erkannt, Bahn fehlt:** Markerstatus zeigt fehlende Floor-Plane, unvollständiges Polygon oder Tracking-Probleme. Ein stabiler Scan wartet auf die Plane-Erkennung.
+- **Keine Verbindung:** App tragen/öffnen, USB-Freigabe, `adb reverse` oder LAN-IP prüfen.
+- **Nutzer bei 0 km/h:** Ohne angebundenes Laufband ist das in der Laufbandquelle erwartet; feste Test-km/h wählen.
+- **Ghost läuft trotz Nutzerstillstand:** Erwartet: Der Avatar hat eine eigene Pace. Zum Anhalten ausdrücklich pausieren oder stoppen.
