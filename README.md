@@ -170,3 +170,43 @@ Die Plank-Haltedauer lässt sich im Behaviour-Tab im Feld „Plank halten · Sek
 
 
 Lauf beenden: Die Server-Schaltfläche „Lauf beenden“ stoppt den Avatar dort, wo er sich gerade befindet. Er dreht sich zum Nutzer, spielt die bereitgestellte Mixamo-Animation Standing Thumbs Up einmal ab und bleibt danach zum Nutzer ausgerichtet. Zeit und Distanzen bleiben erhalten. „Lauf zurücksetzen“ ist getrennt: Beide Laufpartner beginnen wieder bei null, ohne Abschlussgeste; Bestzeiten werden erhalten.
+
+
+## Warm-up vor dem Lauf
+
+Im Tab **Warm-up** die Reihenfolge, Übungen und Dauer festlegen. Verfügbar sind
+Warming Up ohne Schläge, Arm Stretching, Arme & Beine aufwärmen, Air Squat und
+Jumping Jacks. Plank ist ausgeschlossen. Bis zu 20 Schritte mit jeweils 5–300
+ganzen Sekunden sind möglich; derselbe Clip darf mehrfach vorkommen.
+**Ablauf speichern** speichert den Entwurf in diesem Browser. **Warm-up starten**
+überträgt eine vollständige Kopie an die Brille, die den Ablauf selbst abspielt.
+Die Dauer ist echte Zeit bei normalem Animationstempo.
+
+Vorher Bodenmarker und Platzierung einrichten. Beim Start geradeaus schauen:
+Der Avatar steht 2,5 m vor der Startposition des Headsets, zum Nutzer gedreht,
+auf der erkannten Bodenebene. Er bleibt dort stehen, wenn der Nutzer den Kopf
+bewegt. Oben im Sichtfeld erscheinen **Warm UP**, Übung und Restzeit. Das
+funktioniert mit Side by Side und Tempo-Partner. Laufzeit und Distanz bleiben
+bei null; die gespeicherte Avatar-Bahn bleibt erhalten.
+
+**Nächste Übung** überspringt den aktuellen Schritt. **Warm-up beenden** beendet
+den Modus. Nach dem letzten Schritt dreht sich der Avatar und joggt mit der ursprünglichen
+Mixamo-Jogging-Animation zur gewählten Bahn zurück. Dort richtet er sich in
+Laufrichtung aus und bleibt stehen. Auch „Warm-up beenden“ löst diesen Rückweg
+aus. Während des Rückwegs zeigt die Webseite die Reststrecke; Laufstart ist erst
+nach der Ankunft möglich. Laufzeit und Distanz zählen den Rückweg nicht mit.
+Bei zu wenig Abstand zum Nutzer wartet der Avatar. Ein Lauf startet danach über
+die Laufsteuerung. Bei einem vorherigen Lauf zuerst **Lauf zurücksetzen**. Verlust von
+Tracking/Platzierung, App-Pause oder Serververbindung beendet das Warm-up.
+Zum Ändern der Platzierung oder Abspielen einer manuellen Behaviour-Animation
+zuerst das aktive Warm-up beenden. Sprachansagen sind noch nicht enthalten.
+
+Die Unity-App neu bauen und auf der Brille installieren. Prüfung im Editor:
+**Tools > Jogger > Checks > Check Warm-up mode**. Die Implementierung wird beim
+App-Start automatisch installiert; Szenen müssen nicht von Hand geändert werden.
+
+Protokoll: `exercise.startWarmup` mit
+`{"steps":[{"animationId":"Mixamo_ArmStretching","seconds":30}]}`;
+`exercise.nextWarmup` und `exercise.stopWarmup` mit leerem Payload.
+Die Registry meldet diese Commands und `warmupSequence`; Status und tatsächlicher
+Fortschritt stehen unter `telemetry.treadmill.warmup`.
