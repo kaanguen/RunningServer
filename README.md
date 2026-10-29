@@ -167,3 +167,6 @@ Plank ist im Behaviour-Tab als einzelner Ablauf verfügbar: Start Plank → 10 S
 
 
 Die Plank-Haltedauer lässt sich im Behaviour-Tab im Feld „Plank halten · Sekunden“ vor dem Abspielen auf 1–300 Sekunden einstellen. Standard ist 10. Bei Normaltempo entspricht die Eingabe der realen Haltezeit; Tempo 2× halbiert sie. Die Änderung gilt ab dem nächsten Abspielen. Dafür die aktualisierte Unity-App mit den drei Plank-States verwenden.
+
+
+Lauf beenden: Die Server-Schaltfläche „Lauf beenden“ stoppt den Avatar dort, wo er sich gerade befindet. Er dreht sich zum Nutzer, spielt die bereitgestellte Mixamo-Animation Standing Thumbs Up einmal ab und bleibt danach zum Nutzer ausgerichtet. Zeit und Distanzen bleiben erhalten. „Lauf zurücksetzen“ ist getrennt: Beide Laufpartner beginnen wieder bei null, ohne Abschlussgeste; Bestzeiten werden erhalten.

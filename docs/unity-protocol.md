@@ -153,3 +153,6 @@ verwenden wie alle anderen Befehle den ACK-Cache.
 
 
 Einstellbare Plank-Dauer: `avatar.playAnimation` akzeptiert für `Mixamo_Plank` optional `holdSeconds` (1–300, Standard 10). Die Registry meldet `supportsHoldDuration: true` bei diesem Eintrag. Intro, zyklisches Halten und Outro werden als separate Animator-States gespielt; ein anderer Haltewert verändert nur die Haltephase, nicht das Tempo der Bewegungen. Wie das übrige Animationstempo skaliert `speed` auch die Haltezeit: 30 bei 2× entsprechen 15 realen Sekunden. Nicht-Plank-Clips lehnen `holdSeconds` ab.
+
+
+Laufende und Reset sind getrennt: `runningMate.command {action:"stop"}` pausiert die Laufzeit und erhält Distanzen und die aktuellen Weltpositionen beider Avatare. Nach einem laufenden oder pausierten Lauf dreht sich der aktive Avatar vor Ort zum Nutzer, spielt einmal `Standing Thumbs Up` und bleibt danach entspannt zu ihm ausgerichtet. Weitere Stop-Befehle starten die Geste nicht erneut. Pause und Verbindungsabbruch lösen sie nicht aus. `action:"reset"` beendet die Abschlussreaktion und setzt Nutzer-/Ghost-Distanz und Laufzeit auf null; gespeicherte Bestzeiten bleiben erhalten. Start/Fortsetzen und manuelle Animationen beenden die Abschlussreaktion ebenfalls.
