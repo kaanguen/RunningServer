@@ -2,11 +2,14 @@ const $ = selector => document.querySelector(selector);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let userSpeedDraft={source:'FixedTest',speedKmh:10},userSpeedPending=false,ghostSpeedPending=false;
 let collectiblesDraft={source:'Fixed',fixedCount:10},collectiblesPending=false,collectiblesEdited=false;
-let behaviourPending=false,behaviourLoop=true,behaviourSpeed=1;
+let behaviourPending=false,behaviourLoop=false,behaviourSpeed=1,plankHoldSeconds=10;
 const behaviourAnimations=[
-  {id:'Warmup_ArmsAndTorso',name:'Arme & Oberkörper',category:'Warmup',duration:8,description:'Arme heben, öffnen und den Oberkörper locker drehen.',icon:'↟'},
-  {id:'Warmup_StepJacks',name:'Step Jacks',category:'Warmup',duration:4,description:'Seitlich aussteigen und beide Arme über den Kopf heben.',icon:'↔'},
-  {id:'Warmup_Legs',name:'Beine aufwärmen',category:'Warmup',duration:10,description:'Knieheben, Anfersen und Wadenheben im Wechsel.',icon:'⌁'},
+  {id:'Mixamo_BatterOnDeck',name:'Arme & Beine aufwärmen',category:'Warmup',duration:14.4,description:'Mixamo-Aufwärmen mit Armen und Beinen, ohne Schlägerhalten und Schlagbewegung.',icon:'↟'},
+  {id:'Mixamo_StartJumpingJacks',name:'Jumping Jacks',category:'Warmup',duration:1.267,continuous:true,description:'Durchgehender Mixamo-Loop: öffnen und schließen. Läuft bis zum Stoppen.',icon:'↔'},
+  {id:'Mixamo_WarmingUp',name:'Warming Up · ohne Schläge',category:'Warmup',duration:2.067,description:'Originale Mixamo-Arm- und Beinbewegungen bis vor die Faustschläge.',icon:'↻'},
+  {id:'Mixamo_ArmStretching',name:'Arm Stretching · Arme dehnen',category:'Warmup',duration:8.867,description:'Arme und Schultern mit der originalen Mixamo-Bewegung dehnen.',icon:'↔'},
+  {id:'Mixamo_AirSquat',name:'Air Squat · Kniebeugen',category:'Warmup',duration:1.867,description:'Kontrollierte Kniebeugen ohne Geräte.',icon:'↕'},
+  {id:'Mixamo_Plank',name:'Plank · Start, halten, Ende',category:'Warmup',duration:18.34,description:'In die Plank gehen, die eingestellte Dauer halten und anschließend wieder aufstehen. Wiederholung spielt den ganzen Ablauf.',icon:'▰'},
   {id:'Idle',name:'Ruhig stehen',category:'Locomotion',description:'Die Ruheanimation am Platz abspielen.',icon:'○'},
   {id:'Walking',name:'Gehen',category:'Locomotion',description:'Gehbewegung am Platz ansehen.',icon:'→'},
   {id:'Jogging',name:'Joggen',category:'Locomotion',description:'Laufbewegung am Platz ansehen.',icon:'↗'},
@@ -84,9 +87,9 @@ function treadmill() {
 }
 function behaviour() {
   const entries=behaviourAnimations.map(entry=>({...entry,...state.registry?.animations?.find(item=>item&&typeof item==='object'&&item.id===entry.id)}));
-  const tiles=category=>`<div class="behaviour-grid">${entries.filter(item=>item.category===category).map(item=>`<div class="behaviour-tile" data-behaviour-tile="${escape(item.id)}"><div class="behaviour-tile-top"><span class="behaviour-icon" aria-hidden="true">${escape(item.icon)}</span><span class="pill">${item.duration?escape(Number(item.duration).toFixed(0))+' S':'AM PLATZ'}</span></div><h3>${escape(item.name)}</h3><p>${escape(item.description)}</p><button type="button" data-animation="${escape(item.id)}" aria-pressed="false" disabled>Abspielen</button></div>`).join('')}</div>`;
+  const tiles=category=>`<div class="behaviour-grid">${entries.filter(item=>item.category===category).map(item=>`<div class="behaviour-tile" data-behaviour-tile="${escape(item.id)}"><div class="behaviour-tile-top"><span class="behaviour-icon" aria-hidden="true">${escape(item.icon)}</span><span class="pill">${item.id==='Mixamo_Plank'?'ABLAUF':item.duration?escape(Number(item.duration).toFixed(0))+' S':'AM PLATZ'}</span></div><h3>${escape(item.name)}</h3><p>${escape(item.description)}</p>${item.id==='Mixamo_Plank'?`<label for="plank-hold-seconds">Plank halten · Sekunden<input id="plank-hold-seconds" type="number" min="1" max="300" step="1" value="${plankHoldSeconds}"><small>1–300 s bei Normaltempo · gilt beim nächsten Abspielen</small></label>`:''}<button type="button" data-animation="${escape(item.id)}" aria-pressed="false" disabled>Abspielen</button></div>`).join('')}</div>`;
   return card('Avatar steuern',`<div class="behaviour-now"><div><span class="eyebrow">AKTUELLE ANIMATION</span><strong id="behaviour-current">Warte auf die Brille</strong></div><button id="behaviour-stop" type="button" disabled>Zur Laufbewegung</button></div><div class="behaviour-options"><label class="behaviour-loop-label"><input id="behaviour-loop" type="checkbox" ${behaviourLoop?'checked':''}> Animation wiederholen</label><label for="behaviour-speed">Abspieltempo<select id="behaviour-speed">${[.25,.5,.75,1,1.25,1.5,2].map(value=>`<option value="${value}" ${value===behaviourSpeed?'selected':''}>${String(value).replace('.',',')}×${value===1?' · Normal':''}</option>`).join('')}</select></label></div><progress id="behaviour-progress" value="0" max="1" aria-label="Animationsfortschritt" hidden></progress><p id="behaviour-status" class="help" role="status"></p><p class="help">Eine manuelle Animation pausiert den Lauf und spielt am platzierten Avatar ab – in Side by Side und beim Tempo-Partner. Laufzeit, Distanz und Bestzeiten bleiben erhalten. Nach „Zur Laufbewegung“ kannst du den Lauf im Tab Laufband fortsetzen.</p>`,true,'AVATAR')
-    +card('Aufwärmen',tiles('Warmup'),true,'3 CLIPS')
+    +card('Aufwärmen',tiles('Warmup'),true,'6 MIXAMO-ABLÄUFE')
     +card('Bewegungen',tiles('Locomotion'),true,'VORSCHAU');
 }
 async function changeAvatarAnimation(animationId) {
@@ -94,11 +97,19 @@ async function changeAvatarAnimation(animationId) {
   const entry=behaviourAnimations.find(item=>item.id===animationId);
   if(animationId!==null&&!entry)return;
   const speed=Number($('#behaviour-speed')?.value??behaviourSpeed);
-  const loop=$('#behaviour-loop')?.checked??behaviourLoop;
+  const loop=entry?.continuous||($('#behaviour-loop')?.checked??behaviourLoop);
+  if(entry?.continuous){behaviourLoop=true;if($('#behaviour-loop'))$('#behaviour-loop').checked=true;}
   if(!Number.isFinite(speed)||speed<.25||speed>2){notice('Abspieltempo muss zwischen 0,25 und 2 liegen.');return;}
+  const payload=animationId===null?{}:{animationId,loop,speed};
+  if(animationId==='Mixamo_Plank'){
+    const seconds=Number($('#plank-hold-seconds')?.value??plankHoldSeconds);
+    if(!Number.isInteger(seconds)||seconds<1||seconds>300){notice('Plank-Haltedauer muss zwischen 1 und 300 Sekunden liegen.');return;}
+    if(!state.registry?.animations?.find(a=>a.id===animationId)?.supportsHoldDuration){notice('Für die einstellbare Plank-Dauer wird die aktualisierte MarkerML2-App benötigt.');return;}
+    plankHoldSeconds=seconds;payload.holdSeconds=seconds;
+  }
   behaviourPending=true;updateLive();
   try {
-    await confirmedCommand(animationId===null?'avatar.stopAnimation':'avatar.playAnimation',animationId===null?{}:{animationId,loop,speed});
+    await confirmedCommand(animationId===null?'avatar.stopAnimation':'avatar.playAnimation',payload);
     notice(animationId===null?'Automatische Laufbewegung von der Brille bestätigt.':`${entry.name} von der Brille bestätigt · Lauf bleibt pausiert.`);
   } catch(error){notice(error.message);}
   finally{behaviourPending=false;updateLive();}
@@ -120,6 +131,7 @@ function updateBehaviour(run,isML2) {
   document.querySelectorAll('[data-behaviour-tile]').forEach(tile=>tile.classList.toggle('is-playing',!!current?.active&&tile.dataset.behaviourTile===current.animationId));
   $('#behaviour-stop').disabled=behaviourPending||!fresh||!supported||!current?.active;
   $('#behaviour-loop').disabled=behaviourPending;
+  if($('#plank-hold-seconds'))$('#plank-hold-seconds').disabled=behaviourPending;
   $('#behaviour-speed').disabled=behaviourPending;
   $('#behaviour-current').textContent=!fresh?'Warte auf die Brille':current?.active?(current.label||current.animationId):'Automatische Laufbewegung';
   const progress=$('#behaviour-progress');
@@ -251,6 +263,7 @@ function drawPreview(settings) {
 function on(id,fn) {const el=$('#'+id);if(el) el.onclick=async()=>{try{await fn();}catch(e){notice(e.message);log('error',e.message);}};}
 function bind() {
   document.querySelectorAll('[data-animation]').forEach(button=>button.onclick=()=>{if(!button.disabled)return changeAvatarAnimation(button.dataset.animation);});
+  if($('#plank-hold-seconds'))$('#plank-hold-seconds').oninput=()=>{const n=Number($('#plank-hold-seconds').value);if(Number.isInteger(n)&&n>=1&&n<=300)plankHoldSeconds=n;};
   on('behaviour-stop',()=>changeAvatarAnimation(null));
   if($('#behaviour-loop'))$('#behaviour-loop').onchange=()=>{behaviourLoop=$('#behaviour-loop').checked;};
   if($('#behaviour-speed'))$('#behaviour-speed').onchange=()=>{behaviourSpeed=Number($('#behaviour-speed').value);};

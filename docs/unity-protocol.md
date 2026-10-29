@@ -131,7 +131,7 @@ Der Marker-/Floor-Ray-Spawn wurde mit Marker 39 auf der Magic Leap 2 bestätigt:
 
 `avatar.playAnimation`: `commandPayload` enthält `animationId` (String, erforderlich),
 `loop` (Boolean, optional, Standard true) und `speed` (Zahl 0.25–2, optional, Standard 1).
-IDs: `Warmup_ArmsAndTorso`, `Warmup_StepJacks`, `Warmup_Legs`, `Idle`, `Walking`,
+IDs: `Mixamo_BatterOnDeck`, `Mixamo_StartJumpingJacks`, `Mixamo_WarmingUp`, `Mixamo_ArmStretching`, `Mixamo_AirSquat`, `Mixamo_Plank`, `Idle`, `Walking`,
 `Jogging`, `Sprint`. Ein gültiger Befehl benötigt die fertige Platzierung und pausiert
 gegebenenfalls die laufende Session, ohne deren Statistik zurückzusetzen.
 
@@ -147,3 +147,9 @@ läuft der Zähler weiter. Ohne manuelle Auswahl lautet `animationId` `Automatic
 Ungültige IDs, unbekannte Payload-Felder, falsche Typen und Tempi außerhalb des
 Bereichs werden vor einer Änderung der Session abgelehnt. Doppelte Command-IDs
 verwenden wie alle anderen Befehle den ACK-Cache.
+
+
+`Mixamo_Plank` ist ein einzelner Ablauf aus Start Plank → Plank (10 Clip-Sekunden Haltephase) → End Plank. Übergänge überblenden jeweils 0,18 s. `loop=true` wiederholt den gesamten Ablauf; `loop=false` spielt inklusive Aufstehen einmal. Das Abspieltempo skaliert alle Phasen (bei 2× sind es 5 reale Sekunden Halten). Explizites Stoppen unterbricht wie bei anderen Clips sofort.
+
+
+Einstellbare Plank-Dauer: `avatar.playAnimation` akzeptiert für `Mixamo_Plank` optional `holdSeconds` (1–300, Standard 10). Die Registry meldet `supportsHoldDuration: true` bei diesem Eintrag. Intro, zyklisches Halten und Outro werden als separate Animator-States gespielt; ein anderer Haltewert verändert nur die Haltephase, nicht das Tempo der Bewegungen. Wie das übrige Animationstempo skaliert `speed` auch die Haltezeit: 30 bei 2× entsprechen 15 realen Sekunden. Nicht-Plank-Clips lehnen `holdSeconds` ab.
