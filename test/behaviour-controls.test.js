@@ -37,7 +37,7 @@ test('fresh telemetry and installed clip catalog gate playback; stop stays possi
   d.run("connected=true;lastTelemetryAt=Date.now();state.registry={commands:['avatar.playAnimation','avatar.stopAnimation'],animations:[{id:'Mixamo_BatterOnDeck'}]};");
   d.run("updateBehaviour({placementReady:true,heightConfirmed:true,headPoseReady:true,behaviour:{active:true,animationId:'Mixamo_BatterOnDeck',label:'Batter On Deck',loop:true,speed:1,elapsed:3,duration:10}},true)");
   assert.equal(d.button.disabled,false);assert.equal(d.button['aria-pressed'],'true');assert.equal(d.nodes.get('#behaviour-progress').value,.3);
-  assert.equal(d.nodes.get('#behaviour-current').textContent,'Batter On Deck');
+  assert.equal(d.nodes.get('#behaviour-current').textContent,'Arme und Beine');
   d.run("updateBehaviour({placementReady:false,behaviour:{active:true,animationId:'Mixamo_BatterOnDeck'}},true)");
   assert.equal(d.button.disabled,true);assert.equal(d.nodes.get('#behaviour-stop').disabled,false);
   d.run("lastTelemetryAt=0;updateBehaviour({behaviour:{active:true,label:'OLD'}},true)");

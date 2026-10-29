@@ -190,9 +190,13 @@ funktioniert mit Side by Side und Tempo-Partner. Laufzeit und Distanz bleiben
 bei null; die gespeicherte Avatar-Bahn bleibt erhalten.
 
 **Nächste Übung** überspringt den aktuellen Schritt. **Warm-up beenden** beendet
-den Modus. Nach dem letzten Schritt blendet die Bewegung zu Idle über. Ein
-Lauf startet erst über die Laufsteuerung; dabei wird die gewählte Bahn wieder
-verwendet. Bei einem vorherigen Lauf zuerst **Lauf zurücksetzen**. Verlust von
+den Modus. Nach dem letzten Schritt dreht sich der Avatar und joggt mit der ursprünglichen
+Mixamo-Jogging-Animation zur gewählten Bahn zurück. Dort richtet er sich in
+Laufrichtung aus und bleibt stehen. Auch „Warm-up beenden“ löst diesen Rückweg
+aus. Während des Rückwegs zeigt die Webseite die Reststrecke; Laufstart ist erst
+nach der Ankunft möglich. Laufzeit und Distanz zählen den Rückweg nicht mit.
+Bei zu wenig Abstand zum Nutzer wartet der Avatar. Ein Lauf startet danach über
+die Laufsteuerung. Bei einem vorherigen Lauf zuerst **Lauf zurücksetzen**. Verlust von
 Tracking/Platzierung, App-Pause oder Serververbindung beendet das Warm-up.
 Zum Ändern der Platzierung oder Abspielen einer manuellen Behaviour-Animation
 zuerst das aktive Warm-up beenden. Sprachansagen sind noch nicht enthalten.

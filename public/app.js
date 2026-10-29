@@ -4,13 +4,13 @@ let userSpeedDraft={source:'FixedTest',speedKmh:10},userSpeedPending=false,ghost
 let collectiblesDraft={source:'Fixed',fixedCount:10},collectiblesPending=false,collectiblesEdited=false;
 let behaviourPending=false,behaviourLoop=false,behaviourSpeed=1,plankHoldSeconds=10;
 const behaviourAnimations=[
-  {id:'Mixamo_BatterOnDeck',name:'Arme & Beine aufwärmen',category:'Warmup',duration:14.4,description:'Mixamo-Aufwärmen mit Armen und Beinen, ohne Schlägerhalten und Schlagbewegung.',icon:'↟'},
-  {id:'Mixamo_StartJumpingJacks',name:'Jumping Jacks',category:'Warmup',duration:1.267,continuous:true,description:'Durchgehender Mixamo-Loop: öffnen und schließen. Läuft bis zum Stoppen.',icon:'↔'},
-  {id:'Mixamo_WarmingUp',name:'Warming Up · ohne Schläge',category:'Warmup',duration:2.067,description:'Originale Mixamo-Arm- und Beinbewegungen bis vor die Faustschläge.',icon:'↻'},
-  {id:'Mixamo_ArmStretching',name:'Arm Stretching · Arme dehnen',category:'Warmup',duration:8.867,description:'Arme und Schultern mit der originalen Mixamo-Bewegung dehnen.',icon:'↔'},
-  {id:'Mixamo_AirSquat',name:'Air Squat · Kniebeugen',category:'Warmup',duration:1.867,description:'Kontrollierte Kniebeugen ohne Geräte.',icon:'↕'},
-  {id:'Mixamo_Plank',name:'Plank · Start, halten, Ende',category:'Warmup',duration:18.34,description:'In die Plank gehen, die eingestellte Dauer halten und anschließend wieder aufstehen. Wiederholung spielt den ganzen Ablauf.',icon:'▰'},
-  {id:'Idle',name:'Ruhig stehen',category:'Locomotion',description:'Die Ruheanimation am Platz abspielen.',icon:'○'},
+  {id:'Mixamo_BatterOnDeck',name:'Arme und Beine',category:'Warmup',duration:14.4,description:'Mixamo-Aufwärmen mit Armen und Beinen, ohne Schlägerhalten und Schlagbewegung.',icon:'↟'},
+  {id:'Mixamo_StartJumpingJacks',name:'Hampelmänner',category:'Warmup',duration:1.267,continuous:true,description:'Durchgehender Mixamo-Loop: öffnen und schließen. Läuft bis zum Stoppen.',icon:'↔'},
+  {id:'Mixamo_WarmingUp',name:'Aufwärmen',category:'Warmup',duration:2.067,description:'Originale Mixamo-Arm- und Beinbewegungen bis vor die Faustschläge.',icon:'↻'},
+  {id:'Mixamo_ArmStretching',name:'Arme dehnen',category:'Warmup',duration:8.867,description:'Arme und Schultern mit der originalen Mixamo-Bewegung dehnen.',icon:'↔'},
+  {id:'Mixamo_AirSquat',name:'Kniebeugen',category:'Warmup',duration:1.867,description:'Kontrollierte Kniebeugen ohne Geräte.',icon:'↕'},
+  {id:'Mixamo_Plank',name:'Unterarmstütz',category:'Warmup',duration:18.34,description:'In die Plank gehen, die eingestellte Dauer halten und anschließend wieder aufstehen. Wiederholung spielt den ganzen Ablauf.',icon:'▰'},
+  {id:'Idle',name:'Stehen',category:'Locomotion',description:'Die Ruheanimation am Platz abspielen.',icon:'○'},
   {id:'Walking',name:'Gehen',category:'Locomotion',description:'Gehbewegung am Platz ansehen.',icon:'→'},
   {id:'Jogging',name:'Joggen',category:'Locomotion',description:'Laufbewegung am Platz ansehen.',icon:'↗'},
   {id:'Sprint',name:'Sprinten',category:'Locomotion',description:'Schnelle Laufbewegung am Platz ansehen.',icon:'»'}
@@ -95,7 +95,7 @@ function validateWarmupPlan(plan) {
 }
 function warmup() {
   const total=warmupDraft.reduce((sum,step)=>sum+(Number.isFinite(step.seconds)?step.seconds:0),0);
-  return card('Dein Warm-up',`<div class="warmup-live"><span class="warmup-kicker">VOR DEM LAUF</span><h3 id="warmup-current">Bereit zum Aufwärmen</h3><div class="warmup-countdown" id="warmup-countdown">—<small>Sekunden übrig</small></div><progress id="warmup-progress" max="1" value="0" aria-label="Fortschritt des Warm-ups"></progress><p id="warmup-step-status" role="status"></p></div><div class="buttons"><button id="warmup-start" class="primary" type="button" disabled>Warm-up starten</button><button id="warmup-next" type="button" disabled>Nächste Übung</button><button id="warmup-stop" type="button" disabled>Warm-up beenden</button></div><p id="warmup-feedback" class="help" role="status"></p><div class="warmup-placement"><strong>Der Avatar macht vor, du machst mit.</strong><p>Schau beim Start geradeaus. Der Avatar steht etwa 2,5 m vor dir auf dem Boden und schaut zu dir. Oben in der Brille stehen „Warm UP“, die Übung und die verbleibenden Sekunden.</p></div><button id="warmup-to-run" type="button">Zur Laufsteuerung →</button><p class="help">Der Lauf startet anschließend über die Laufsteuerung. Deine gewählte Avatar-Bahn bleibt erhalten. Warm-up ist vor einer neuen Runde verfügbar; einen vorherigen Lauf zuerst zurücksetzen.</p>`,false,'MIXAMO')
+  return card('Dein Warm-up',`<div class="warmup-live"><span class="warmup-kicker">VOR DEM LAUF</span><h3 id="warmup-current">Bereit zum Aufwärmen</h3><div class="warmup-countdown" id="warmup-countdown">—<small>Sekunden übrig</small></div><progress id="warmup-progress" max="1" value="0" aria-label="Fortschritt des Warm-ups"></progress><p id="warmup-step-status" role="status"></p></div><div class="buttons"><button id="warmup-start" class="primary" type="button" disabled>Warm-up starten</button><button id="warmup-next" type="button" disabled>Nächste Übung</button><button id="warmup-stop" type="button" disabled>Warm-up beenden</button></div><p id="warmup-feedback" class="help" role="status"></p><div class="warmup-placement"><strong>Der Avatar macht vor, du machst mit.</strong><p>Schau beim Start geradeaus. Der Avatar geht von seiner Bahn etwa 2,5 m vor dich und dreht sich zu dir. Erst dann beginnen die Übungen. Die Laufstatistik bleibt bis zum Laufstart ausgeblendet. Oben in der Brille stehen „Warm UP“, die Übung und die verbleibenden Sekunden.</p></div><button id="warmup-to-run" type="button">Zur Laufsteuerung →</button><p class="help">Der Lauf startet anschließend über die Laufsteuerung. Deine gewählte Avatar-Bahn bleibt erhalten. Warm-up ist vor einer neuen Runde verfügbar; einen vorherigen Lauf zuerst zurücksetzen.</p>`,false,'MIXAMO')
     +card('Übungsablauf festlegen',`<div class="warmup-plan-heading"><p>Reihenfolge und Dauer pro Übung. Jede Bewegung wiederholt sich fließend bis zum nächsten Schritt.</p><span id="warmup-total" class="pill">${paceText(total)} MIN GESAMT</span></div><ol id="warmup-plan" class="warmup-plan">${warmupDraft.map((step,index)=>`<li data-warmup-row="${index}"><span class="warmup-order">${index+1}</span><div class="warmup-fields"><label for="warmup-exercise-${index}">Übung<select id="warmup-exercise-${index}" data-warmup-exercise="${index}">${warmupExercises.map(item=>`<option value="${item.id}" ${step.animationId===item.id?'selected':''}>${escape(item.name)}</option>`).join('')}</select></label><label for="warmup-seconds-${index}">Dauer · s<input id="warmup-seconds-${index}" data-warmup-seconds="${index}" type="number" min="5" max="300" step="1" value="${escape(step.seconds)}" required></label></div><div class="warmup-row-actions"><button type="button" data-warmup-up="${index}" aria-label="Übung ${index+1} nach oben" ${index===0?'disabled':''}>↑</button><button type="button" data-warmup-down="${index}" aria-label="Übung ${index+1} nach unten" ${index===warmupDraft.length-1?'disabled':''}>↓</button><button type="button" data-warmup-remove="${index}" aria-label="Übung ${index+1} entfernen" ${warmupDraft.length===1?'disabled':''}>×</button></div></li>`).join('')}</ol><div class="buttons"><button id="warmup-add" type="button">+ Übung hinzufügen</button><button id="warmup-save" type="button">Ablauf speichern</button></div><p id="warmup-plan-feedback" class="help" role="status">${escape(warmupPlanFeedback)}</p><p class="help">5–300 Sekunden pro Übung · bis zu 20 Schritte. Plank ist in diesem Modus ausgeschlossen. Speichern behält den Ablauf in diesem Browser; „Warm-up starten“ sendet ihn an die Brille. Änderungen gelten für den nächsten Start.</p>`,false,'ABLAUF');
 }
 function warmupAvailability() {
@@ -118,7 +118,7 @@ async function warmupCommand(action) {
   const command={start:'exercise.startWarmup',stop:'exercise.stopWarmup',next:'exercise.nextWarmup'}[action];
   if(!command)return;
   warmupPending=true;warmupFeedback='Warte auf Bestätigung der Brille …';updateLive();
-  try {await confirmedCommand(command,payload);warmupFeedback=({start:'Warm-up gestartet',stop:'Warm-up beendet',next:'Nächste Übung'})[action]+' · von der Brille bestätigt.';}
+  try {await confirmedCommand(command,payload);warmupFeedback=({start:'Warm-up gestartet',stop:'Warm-up beendet · Avatar geht zur Bahn zurück',next:'Nächste Übung'})[action]+' · von der Brille bestätigt.';}
   catch(error){warmupFeedback='Nicht ausgeführt: '+error.message;}
   finally {warmupPending=false;updateLive();}
 }
@@ -158,16 +158,17 @@ function updateWarmup(run,isML2) {
   if(!$('#warmup-current'))return;
   const {fresh,supported,ready,beforeRun,clipsReady}=warmupAvailability();
   const current=fresh?run.warmup:null,active=!!current?.active;
+  const approaching=!!current?.approaching;
   $('#warmup-start').disabled=warmupPending||!fresh||!supported||!ready||!beforeRun||active||!clipsReady||!validateWarmupPlan(warmupDraft);
   $('#warmup-start').hidden=active;
-  $('#warmup-next').disabled=warmupPending||!fresh||!supported||!active||!!current?.finishing;
-  $('#warmup-stop').disabled=warmupPending||!fresh||!supported||!active;
-  $('#warmup-next').hidden=$('#warmup-stop').hidden=!active;
+  $('#warmup-next').disabled=warmupPending||!fresh||!supported||!active||!!current?.finishing||approaching;
+  $('#warmup-stop').disabled=warmupPending||!fresh||!supported||!active||!!current?.finishing||!!current?.returning;
+  $('#warmup-next').hidden=$('#warmup-stop').hidden=!active||!!current?.returning;
   const completed=current?.status==='Completed';
-  $('#warmup-current').textContent=!fresh?'Warte auf die Brille':active?(current.finishing?'Geschafft!':current.label):completed?'Warm-up geschafft':current?.status==='Interrupted'?'Warm-up unterbrochen':'Bereit zum Aufwärmen';
-  const remaining=active?Math.max(0,Math.ceil(Number(current.stepDuration)-Number(current.stepElapsed))):null;
-  $('#warmup-countdown').innerHTML=remaining===null?'—<small>Sekunden übrig</small>':`${remaining}<small>Sekunden übrig</small>`;
-  $('#warmup-step-status').textContent=active?`Übung ${Number(current.stepIndex)+1} von ${current.stepCount} · ${Math.ceil(Math.max(0,Number(current.duration)-Number(current.elapsed)))} s insgesamt übrig`:completed?'Du kannst jetzt zur Laufsteuerung wechseln.':'Die Laufzeit bleibt während des Warm-ups bei 0.';
+  $('#warmup-current').textContent=!fresh?'Warte auf die Brille':active?(approaching?'Avatar kommt zu dir':current.returning?'Zurück zur Bahn':current.finishing?'Geschafft!':current.label):completed?'Warm-up geschafft':current?.status==='Interrupted'?'Warm-up unterbrochen':'Bereit zum Aufwärmen';
+  const remaining=active&&!approaching&&!current.finishing&&!current.returning?Math.max(0,Math.ceil(Number(current.stepDuration)-Number(current.stepElapsed))):null;
+  $('#warmup-countdown').innerHTML=approaching?`${Math.max(0,Number(current.travelDistance)||0).toFixed(1)}<small>Meter bis zum Warm-up-Platz</small>`:current?.returning?`${Math.max(0,Number(current.returnDistance)||0).toFixed(1)}<small>Meter bis zur Bahn</small>`:remaining===null?'—<small>Sekunden übrig</small>':`${remaining}<small>Sekunden übrig</small>`;
+  $('#warmup-step-status').textContent=approaching?(current.waitingForSpace?'Bitte etwas Platz für den Hinweg lassen.':'Der Avatar geht zu dir. Die Übung startet nach der Ankunft.'):current?.returning?(current.waitingForSpace?'Bitte etwas Platz für den Rückweg lassen.':'Der Avatar geht zurück. Danach kannst du den Lauf starten.'):active?`Übung ${Number(current.stepIndex)+1} von ${current.stepCount} · ${Math.ceil(Math.max(0,Number(current.duration)-Number(current.elapsed)))} s insgesamt übrig`:completed?'Du kannst jetzt zur Laufsteuerung wechseln.':'Die Laufzeit bleibt während des Warm-ups bei 0.';
   $('#warmup-progress').value=active||completed?Math.min(1,Number(current.elapsed)/Math.max(1,Number(current.duration))):0;
   $('#warmup-feedback').textContent=warmupPending?warmupFeedback:!fresh?'Brille verbinden und aktuelle Daten abwarten.':!supported?'Warm-up benötigt die aktualisierte MarkerML2-App.':!ready?'Zuerst unter Kalibrierung Bodenmarker und Avatar-Platzierung einrichten.':!beforeRun&&!active?'Für ein Warm-up vor der nächsten Runde zuerst den Lauf zurücksetzen.':!clipsReady?'Ein gewählter Mixamo-Clip fehlt in der App.':warmupFeedback;
   const locked=warmupPending||active;
@@ -180,7 +181,7 @@ function updateWarmup(run,isML2) {
 }
 
 function behaviour() {
-  const entries=behaviourAnimations.map(entry=>({...entry,...state.registry?.animations?.find(item=>item&&typeof item==='object'&&item.id===entry.id)}));
+  const entries=behaviourAnimations.map(entry=>({...entry,...state.registry?.animations?.find(item=>item&&typeof item==='object'&&item.id===entry.id),name:entry.name}));
   const tiles=category=>`<div class="behaviour-grid">${entries.filter(item=>item.category===category).map(item=>`<div class="behaviour-tile" data-behaviour-tile="${escape(item.id)}"><div class="behaviour-tile-top"><span class="behaviour-icon" aria-hidden="true">${escape(item.icon)}</span><span class="pill">${item.id==='Mixamo_Plank'?'ABLAUF':item.duration?escape(Number(item.duration).toFixed(0))+' S':'AM PLATZ'}</span></div><h3>${escape(item.name)}</h3><p>${escape(item.description)}</p>${item.id==='Mixamo_Plank'?`<label for="plank-hold-seconds">Plank halten · Sekunden<input id="plank-hold-seconds" type="number" min="1" max="300" step="1" value="${plankHoldSeconds}"><small>1–300 s bei Normaltempo · gilt beim nächsten Abspielen</small></label>`:''}<button type="button" data-animation="${escape(item.id)}" aria-pressed="false" disabled>Abspielen</button></div>`).join('')}</div>`;
   return card('Avatar steuern',`<div class="behaviour-now"><div><span class="eyebrow">AKTUELLE ANIMATION</span><strong id="behaviour-current">Warte auf die Brille</strong></div><button id="behaviour-stop" type="button" disabled>Zur Laufbewegung</button></div><div class="behaviour-options"><label class="behaviour-loop-label"><input id="behaviour-loop" type="checkbox" ${behaviourLoop?'checked':''}> Animation wiederholen</label><label for="behaviour-speed">Abspieltempo<select id="behaviour-speed">${[.25,.5,.75,1,1.25,1.5,2].map(value=>`<option value="${value}" ${value===behaviourSpeed?'selected':''}>${String(value).replace('.',',')}×${value===1?' · Normal':''}</option>`).join('')}</select></label></div><progress id="behaviour-progress" value="0" max="1" aria-label="Animationsfortschritt" hidden></progress><p id="behaviour-status" class="help" role="status"></p><p class="help">Eine manuelle Animation pausiert den Lauf und spielt am platzierten Avatar ab – in Side by Side und beim Tempo-Partner. Laufzeit, Distanz und Bestzeiten bleiben erhalten. Nach „Zur Laufbewegung“ kannst du den Lauf im Tab Laufband fortsetzen.</p>`,true,'AVATAR')
     +card('Aufwärmen',tiles('Warmup'),true,'6 MIXAMO-ABLÄUFE')
@@ -227,7 +228,7 @@ function updateBehaviour(run,isML2) {
   $('#behaviour-loop').disabled=behaviourPending;
   if($('#plank-hold-seconds'))$('#plank-hold-seconds').disabled=behaviourPending;
   $('#behaviour-speed').disabled=behaviourPending;
-  $('#behaviour-current').textContent=!fresh?'Warte auf die Brille':current?.active?(current.label||current.animationId):'Automatische Laufbewegung';
+  $('#behaviour-current').textContent=!fresh?'Warte auf die Brille':current?.active?(behaviourAnimations.find(entry=>entry.id===current.animationId)?.name||current.label||current.animationId):'Automatische Laufbewegung';
   const progress=$('#behaviour-progress');
   progress.hidden=!current?.active;
   const elapsed=Number(current?.elapsed),duration=Number(current?.duration);
@@ -633,8 +634,9 @@ function updateLive() {
     const action=button.dataset.run;
     button.hidden=fresh?!actions[action]:action!=='start';
     const needsPlacement=action==='start'||action==='resume';
-    button.disabled=!fresh||!runSupported||(needsPlacement&&!runReady)||runPending||calibrationPending||settingsPending||warmupPending||!actions[action];
-    button.title=button.disabled?(!fresh?'Brille verbinden und aktuelle Daten abwarten.':needsPlacement&&!runReady?'Zuerst unter Kalibrierung Bodenmarker und Platzierung prüfen.':'Warte auf Bestätigung oder einen passenden Laufzustand.') : '';
+    const warmupBusy=needsPlacement&&!!run.warmup?.active;
+    button.disabled=warmupBusy||!fresh||!runSupported||(needsPlacement&&!runReady)||runPending||calibrationPending||settingsPending||warmupPending||!actions[action];
+    button.title=button.disabled?(warmupBusy?'Warm-up beenden und warten, bis der Avatar auf seiner Bahn steht.':!fresh?'Brille verbinden und aktuelle Daten abwarten.':needsPlacement&&!runReady?'Zuerst unter Kalibrierung Bodenmarker und Platzierung prüfen.':'Warte auf Bestätigung oder einen passenden Laufzustand.') : '';
   });
   if($('#send-settings')) {
     $('#send-settings').disabled=!fresh||settingsPending||runPending||!state.registry?.commands?.includes('runningMate.configure');

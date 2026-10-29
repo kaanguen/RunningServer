@@ -49,3 +49,29 @@ test('save and add edit only the next plan; failed ACK is reported without succe
  d.run('warmupDraft=[{animationId:"Mixamo_AirSquat",seconds:60}];');await d.nodes.get('#warmup-save').onclick();assert.deepEqual(JSON.parse(d.storage.get('markerML2.warmup')),[{animationId:'Mixamo_AirSquat',seconds:60}]);
  d.context.reject=async()=>{throw new Error('Platzierung fehlt');};d.run('confirmedCommand=reject;');await d.run('warmupCommand("start")');assert.match(d.run('warmupFeedback'),/Nicht ausgeführt: Platzierung fehlt/);assert.equal(d.run('warmupPending'),false);
 });
+
+test('return phase shows actual metres and hides exercise controls until avatar reaches its lane',()=>{
+ const d=dashboard();d.run('state.telemetry.treadmill.warmup={active:true,status:"Returning",returning:true,finishing:true,returnDistance:2.35,elapsed:90,duration:90};updateWarmup(state.telemetry.treadmill,true);');
+ assert.equal(d.nodes.get('#warmup-current').textContent,'Zurück zur Bahn');
+ assert.match(d.nodes.get('#warmup-countdown').innerHTML,/2.4.*Meter bis zur Bahn/);
+ assert.equal(d.nodes.get('#warmup-start').hidden,true);assert.equal(d.nodes.get('#warmup-next').hidden,true);assert.equal(d.nodes.get('#warmup-stop').hidden,true);
+ assert.equal(d.nodes.get('#warmup-save').disabled,true);
+ d.run('state.telemetry.treadmill.warmup.waitingForSpace=true;updateWarmup(state.telemetry.treadmill,true);');
+ assert.match(d.nodes.get('#warmup-step-status').textContent,/Platz für den Rückweg/);
+ d.run('state.telemetry.treadmill.warmup={active:false,status:"Completed",elapsed:90,duration:90};updateWarmup(state.telemetry.treadmill,true);');
+ assert.equal(d.nodes.get('#warmup-current').textContent,'Warm-up geschafft');assert.equal(d.nodes.get('#warmup-save').disabled,false);
+});
+
+test('approach shows walking progress while exercise controls and clock wait for arrival',()=>{
+ const d=dashboard();d.run('state.telemetry.treadmill.warmup={active:true,status:"Approaching",approaching:true,travelDistance:3.2,stepIndex:0,stepCount:5,stepElapsed:0,elapsed:0,duration:150};updateWarmup(state.telemetry.treadmill,true);');
+ assert.equal(d.nodes.get('#warmup-current').textContent,'Avatar kommt zu dir');
+ assert.match(d.nodes.get('#warmup-countdown').innerHTML,/3.2.*Meter bis zum Warm-up-Platz/);
+ assert.equal(d.nodes.get('#warmup-next').disabled,true);assert.equal(d.nodes.get('#warmup-stop').disabled,false);
+ assert.equal(d.nodes.get('#warmup-progress').value,0);
+ assert.match(d.nodes.get('#warmup-step-status').textContent,/startet nach der Ankunft/);
+});
+test('all animation choices have short German display names and preserve saved clip ids',()=>{
+ const d=dashboard();
+ assert.deepEqual(JSON.parse(d.run('JSON.stringify(behaviourAnimations.map(a=>a.name))')),['Arme und Beine','Hampelmänner','Aufwärmen','Arme dehnen','Kniebeugen','Unterarmstütz','Stehen','Gehen','Joggen','Sprinten']);
+ assert.equal(d.run('warmupDraft[1].animationId'),'Mixamo_ArmStretching');
+});
