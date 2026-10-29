@@ -135,3 +135,26 @@ Die Marker-/Floor-Ray-Platzierung wurde mit Marker 39 auf der Magic Leap bestät
 - **Keine Verbindung:** App tragen/öffnen, USB-Freigabe, `adb reverse` oder LAN-IP prüfen.
 - **Nutzer bei 0 km/h:** Ohne angebundenes Laufband ist das in der Laufbandquelle erwartet; feste Test-km/h wählen.
 - **Ghost läuft trotz Nutzerstillstand:** Erwartet: Der Avatar hat eine eigene Pace. Zum Anhalten ausdrücklich pausieren oder stoppen.
+
+## Behaviour – Avatar-Animationen
+
+Der eigene Tab **Behaviour** steuert die Animationen des Jogger-Avatars in MarkerML2.
+Verfügbar sind Arme & Oberkörper (8 s), Step Jacks (4 s), Beine aufwärmen (10 s)
+sowie Stehen, Gehen, Joggen und Sprinten als Bewegungsvorschau am Platz.
+
+1. Die aktualisierte MarkerML2-App auf der Brille starten und mit dem Server verbinden.
+2. Unter Kalibrierung Bodenmarker und Avatar-Platzierung einrichten.
+3. Behaviour öffnen, optional Wiederholung und Abspieltempo (0,25–2×) einstellen.
+4. Bei einem Clip Abspielen wählen. Ein laufender Lauf wird pausiert; Distanz,
+   Laufzeit und Bestzeiten bleiben erhalten. Die Animation läuft am aktuellen
+   Begleiter – Side by Side oder Tempo-Partner – ohne Root Motion.
+5. Zur Laufbewegung beendet die manuelle Auswahl. Der Lauf bleibt pausiert;
+   im Tab Laufband mit Fortsetzen weiterlaufen.
+
+Ohne Wiederholung endet die Auswahl nach einer Clip-Länge automatisch. Laufstart,
+Fortsetzen, Stoppen, Reset und Verbindungsabbruch beenden ebenfalls die manuelle
+Animation. Fehlende/alte App-Versionen und fehlende Clips werden gesperrt angezeigt.
+Erfolgsmeldungen erscheinen erst nach der Bestätigung aus Unity.
+
+Das Dashboard allein aktualisiert die Unity-App nicht. Für die Brille ist nach
+Übernahme der Unity-Änderungen ein neuer Build erforderlich.

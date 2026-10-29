@@ -2,6 +2,16 @@ const $ = selector => document.querySelector(selector);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let userSpeedDraft={source:'FixedTest',speedKmh:10},userSpeedPending=false,ghostSpeedPending=false;
 let collectiblesDraft={source:'Fixed',fixedCount:10},collectiblesPending=false,collectiblesEdited=false;
+let behaviourPending=false,behaviourLoop=true,behaviourSpeed=1;
+const behaviourAnimations=[
+  {id:'Warmup_ArmsAndTorso',name:'Arme & Oberkörper',category:'Warmup',duration:8,description:'Arme heben, öffnen und den Oberkörper locker drehen.',icon:'↟'},
+  {id:'Warmup_StepJacks',name:'Step Jacks',category:'Warmup',duration:4,description:'Seitlich aussteigen und beide Arme über den Kopf heben.',icon:'↔'},
+  {id:'Warmup_Legs',name:'Beine aufwärmen',category:'Warmup',duration:10,description:'Knieheben, Anfersen und Wadenheben im Wechsel.',icon:'⌁'},
+  {id:'Idle',name:'Ruhig stehen',category:'Locomotion',description:'Die Ruheanimation am Platz abspielen.',icon:'○'},
+  {id:'Walking',name:'Gehen',category:'Locomotion',description:'Gehbewegung am Platz ansehen.',icon:'→'},
+  {id:'Jogging',name:'Joggen',category:'Locomotion',description:'Laufbewegung am Platz ansehen.',icon:'↗'},
+  {id:'Sprint',name:'Sprinten',category:'Locomotion',description:'Schnelle Laufbewegung am Platz ansehen.',icon:'»'}
+];
 const defaults = { paceSeconds: 360, mode: 'TempoPartner', showTrack: true };
 let draft = { ...defaults };
 try {
@@ -15,6 +25,7 @@ let lastTelemetryAt = 0;
 let state = { headsetConnected: false, telemetry: {}, registry: null }, connected = false, activeTab = 'treadmill', socket, reconnectDelay = 500, noticeTimer;
 const tabs = [
   ['treadmill','◎','Laufband','Pace und Begleiter für deine nächste Session vorbereiten.'],
+  ['behaviour','▷','Behaviour','Aufwärmen und Bewegungen deines Jogger-Avatars abspielen.'],
   ['sensors','♡','Sensoren & Session','Sensordaten beobachten und Sessions auf dem Server verwalten.'],
   ['markers','◇','Kalibrierung','Avatar platzieren und die Laufwelt ausrichten.']
 ];
@@ -70,6 +81,52 @@ function treadmill() {
   + card('Ghost-Geschwindigkeit testen',`<form id="ghost-speed-form"><label for="ghost-speed">Testgeschwindigkeit · km/h</label><div class="ghost-speed-controls"><input id="ghost-speed" type="number" min="0" step="any" value="10" inputmode="decimal" required><button id="ghost-speed-apply" type="submit" class="primary">Testtempo übernehmen</button><button id="ghost-speed-auto" type="button">Zurück zur Bestzeit</button></div></form><p id="ghost-mode-status" class="help" role="status">Warte auf Ghost-Telemetrie.</p><p class="help">Im Testmodus bewegt sich der Ghost mit deinem Testtempo unabhängig von der Bestzeit. 0 km/h hält ihn an. Pause und Stoppen pausieren auch den Ghost. Aufgezeichnete Bestzeiten bleiben erhalten.</p>`,true,'TESTMODUS')
   + card('Deine Rekordzeiten',`<div class="metric-grid" id="record-metrics"></div><p id="record-status" class="help" role="status"></p><p class="help">Gemessene Bestzeiten dieser App-Session. Zielpace und Beispielzeiten zählen nicht als Rekord. Nur „Laufdaten zurücksetzen“, ein Umgebungswechsel oder ein App-Neustart löschen diese Werte. Änderungen an Pace, Modus und Bahnsichtbarkeit erhalten die Bestzeit.</p>`,true,'BESTZEITEN')
   + card('Live-Status' ,'<div class="metric-grid" id="treadmill-metrics"></div><p class="help">Live-Werte erscheinen erst, wenn MarkerML2 seine Laufband-Telemetrie liefert.</p>',true,'HEADSET');
+}
+function behaviour() {
+  const entries=behaviourAnimations.map(entry=>({...entry,...state.registry?.animations?.find(item=>item&&typeof item==='object'&&item.id===entry.id)}));
+  const tiles=category=>`<div class="behaviour-grid">${entries.filter(item=>item.category===category).map(item=>`<div class="behaviour-tile" data-behaviour-tile="${escape(item.id)}"><div class="behaviour-tile-top"><span class="behaviour-icon" aria-hidden="true">${escape(item.icon)}</span><span class="pill">${item.duration?escape(Number(item.duration).toFixed(0))+' S':'AM PLATZ'}</span></div><h3>${escape(item.name)}</h3><p>${escape(item.description)}</p><button type="button" data-animation="${escape(item.id)}" aria-pressed="false" disabled>Abspielen</button></div>`).join('')}</div>`;
+  return card('Avatar steuern',`<div class="behaviour-now"><div><span class="eyebrow">AKTUELLE ANIMATION</span><strong id="behaviour-current">Warte auf die Brille</strong></div><button id="behaviour-stop" type="button" disabled>Zur Laufbewegung</button></div><div class="behaviour-options"><label class="behaviour-loop-label"><input id="behaviour-loop" type="checkbox" ${behaviourLoop?'checked':''}> Animation wiederholen</label><label for="behaviour-speed">Abspieltempo<select id="behaviour-speed">${[.25,.5,.75,1,1.25,1.5,2].map(value=>`<option value="${value}" ${value===behaviourSpeed?'selected':''}>${String(value).replace('.',',')}×${value===1?' · Normal':''}</option>`).join('')}</select></label></div><progress id="behaviour-progress" value="0" max="1" aria-label="Animationsfortschritt" hidden></progress><p id="behaviour-status" class="help" role="status"></p><p class="help">Eine manuelle Animation pausiert den Lauf und spielt am platzierten Avatar ab – in Side by Side und beim Tempo-Partner. Laufzeit, Distanz und Bestzeiten bleiben erhalten. Nach „Zur Laufbewegung“ kannst du den Lauf im Tab Laufband fortsetzen.</p>`,true,'AVATAR')
+    +card('Aufwärmen',tiles('Warmup'),true,'3 CLIPS')
+    +card('Bewegungen',tiles('Locomotion'),true,'VORSCHAU');
+}
+async function changeAvatarAnimation(animationId) {
+  if(behaviourPending)return;
+  const entry=behaviourAnimations.find(item=>item.id===animationId);
+  if(animationId!==null&&!entry)return;
+  const speed=Number($('#behaviour-speed')?.value??behaviourSpeed);
+  const loop=$('#behaviour-loop')?.checked??behaviourLoop;
+  if(!Number.isFinite(speed)||speed<.25||speed>2){notice('Abspieltempo muss zwischen 0,25 und 2 liegen.');return;}
+  behaviourPending=true;updateLive();
+  try {
+    await confirmedCommand(animationId===null?'avatar.stopAnimation':'avatar.playAnimation',animationId===null?{}:{animationId,loop,speed});
+    notice(animationId===null?'Automatische Laufbewegung von der Brille bestätigt.':`${entry.name} von der Brille bestätigt · Lauf bleibt pausiert.`);
+  } catch(error){notice(error.message);}
+  finally{behaviourPending=false;updateLive();}
+}
+function updateBehaviour(run,isML2) {
+  if(!$('#behaviour-status'))return;
+  const fresh=connected&&isML2&&Date.now()-lastTelemetryAt<5000;
+  const supported=state.registry?.commands?.includes('avatar.playAnimation')&&state.registry?.commands?.includes('avatar.stopAnimation');
+  const ready=run.placementReady&&run.heightConfirmed&&run.headPoseReady;
+  const available=new Set((state.registry?.animations||[]).filter(item=>item&&typeof item==='object').map(item=>item.id));
+  const current=fresh?run.behaviour:null;
+  document.querySelectorAll('[data-animation]').forEach(button=>{
+    const id=button.dataset.animation,active=!!current?.active&&current.animationId===id;
+    button.disabled=behaviourPending||!fresh||!supported||!ready||!available.has(id);
+    button.setAttribute('aria-pressed',String(active));
+    button.textContent=active?'Neu starten':'Abspielen';
+    button.title=!fresh?'Brille verbinden und aktuelle Daten abwarten.':!supported?'Aktualisierte MarkerML2-App erforderlich.':!ready?'Zuerst Bodenmarker und Platzierung unter Kalibrierung einrichten.':!available.has(id)?'Dieser Clip ist in der App nicht verfügbar.':'';
+  });
+  document.querySelectorAll('[data-behaviour-tile]').forEach(tile=>tile.classList.toggle('is-playing',!!current?.active&&tile.dataset.behaviourTile===current.animationId));
+  $('#behaviour-stop').disabled=behaviourPending||!fresh||!supported||!current?.active;
+  $('#behaviour-loop').disabled=behaviourPending;
+  $('#behaviour-speed').disabled=behaviourPending;
+  $('#behaviour-current').textContent=!fresh?'Warte auf die Brille':current?.active?(current.label||current.animationId):'Automatische Laufbewegung';
+  const progress=$('#behaviour-progress');
+  progress.hidden=!current?.active;
+  const elapsed=Number(current?.elapsed),duration=Number(current?.duration);
+  progress.value=Number.isFinite(elapsed)&&duration>0?(current.loop?(elapsed%duration)/duration:Math.min(1,elapsed/duration)):0;
+  $('#behaviour-status').textContent=behaviourPending?'Warte auf Bestätigung der Brille …':!fresh?'Keine aktuellen Daten von der Brille.':!supported?'Behaviour benötigt die aktualisierte MarkerML2-App auf der Brille.':!ready?'Unter Kalibrierung zuerst Bodenmarker und Avatar-Platzierung einrichten.':current?.active?`${current.loop?'Wiederholung':'Einmalige Wiedergabe'} · ${Number(current.speed||1).toLocaleString('de-DE')}× · Lauf pausiert.`:'Wähle eine Animation. Der Avatar bleibt an seiner platzierten Position.';
 }
 function sensors() {
   return card('BLE-Sensordaten','<div class="metric-grid" id="ble-metrics"></div><p class="help">MarkerML2 verwendet ein profilbasiertes BLE-Paket, unter anderem für Herzfrequenz, Temperatur und SpO₂. Hier erscheinen ausschließlich vom Headset übertragene Werte.</p><p class="help">Die Sensorverbindung wird am Headset eingerichtet.</p>',true,'HEADSET')
@@ -168,7 +225,7 @@ function organizeLayout() {
     (card.querySelector('.disclosure-body') || card).append(details);
   });
 }
-const renderers={treadmill,sensors,markers};
+const renderers={treadmill,behaviour,sensors,markers};
 function render() {
   const tab=tabs.find(t=>t[0]===activeTab);
   $('#page-title').textContent=tab[2];$('#page-description').textContent=tab[3];
@@ -193,6 +250,10 @@ function drawPreview(settings) {
 }
 function on(id,fn) {const el=$('#'+id);if(el) el.onclick=async()=>{try{await fn();}catch(e){notice(e.message);log('error',e.message);}};}
 function bind() {
+  document.querySelectorAll('[data-animation]').forEach(button=>button.onclick=()=>{if(!button.disabled)return changeAvatarAnimation(button.dataset.animation);});
+  on('behaviour-stop',()=>changeAvatarAnimation(null));
+  if($('#behaviour-loop'))$('#behaviour-loop').onchange=()=>{behaviourLoop=$('#behaviour-loop').checked;};
+  if($('#behaviour-speed'))$('#behaviour-speed').onchange=()=>{behaviourSpeed=Number($('#behaviour-speed').value);};
   if($('#settings-form')) {
     $('#settings-form').onsubmit=e=>{
       e.preventDefault();const next=readDraft();
@@ -475,6 +536,7 @@ function updateLive() {
   updateGhostLive(run,isML2);
   updateUserSpeed(run,isML2);
   updateCollectibles(run,isML2);
+  updateBehaviour(run,isML2);
   updateRecords(run,isML2);
   updateCalibration(run,isML2);
   const indicators=[['Server',connected],['Headset',state.headsetConnected],['MarkerML2',isML2],['BLE',state.headsetConnected&&t.ble?.connected],['REC',state.recording]];

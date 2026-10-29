@@ -126,3 +126,24 @@ Aufnahmen liegen in `RunningServer/recordings/<ID>/`: `ble_data.csv`, `exercise_
 ## Geprüfter Stand
 
 Der Marker-/Floor-Ray-Spawn wurde mit Marker 39 auf der Magic Leap 2 bestätigt: `floorConfirmed: true`, `placementReady: true`, `avatarLane: 3`, `ghost.active: true`, gestoppte Session. Die danach ergänzte Geschwindigkeitsquellen-Auswahl und unabhängige Pace-Anpassung sind kompiliert/getestet, aber noch nicht im zuletzt installierten Build enthalten. Die feste reale 400-m-Bahn und echte Laufband-Hardware sind noch nicht durch einen vollständigen Geräte-Lauf verifiziert.
+
+## Avatar Behaviour (MarkerML2)
+
+`avatar.playAnimation`: `commandPayload` enthält `animationId` (String, erforderlich),
+`loop` (Boolean, optional, Standard true) und `speed` (Zahl 0.25–2, optional, Standard 1).
+IDs: `Warmup_ArmsAndTorso`, `Warmup_StepJacks`, `Warmup_Legs`, `Idle`, `Walking`,
+`Jogging`, `Sprint`. Ein gültiger Befehl benötigt die fertige Platzierung und pausiert
+gegebenenfalls die laufende Session, ohne deren Statistik zurückzusetzen.
+
+`avatar.stopAnimation`: leere Payload. Stellt automatische Locomotion wieder her;
+setzt eine pausierte Session nicht fort.
+
+Registry: `capabilities.avatarBehaviour`, `commands` und `animations` mit Einträgen
+`{id,name,category,duration}`. Telemetrie: `treadmill.behaviour` und
+`runningMate.behaviour` mit `{active,animationId,label,loop,speed,elapsed,duration}`.
+`elapsed` bezeichnet gespielte Clip-Sekunden einschließlich Tempo; bei Wiederholung
+läuft der Zähler weiter. Ohne manuelle Auswahl lautet `animationId` `Automatic`.
+
+Ungültige IDs, unbekannte Payload-Felder, falsche Typen und Tempi außerhalb des
+Bereichs werden vor einer Änderung der Session abgelehnt. Doppelte Command-IDs
+verwenden wie alle anderen Befehle den ACK-Cache.
