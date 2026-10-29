@@ -2,6 +2,19 @@ const $ = selector => document.querySelector(selector);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let userSpeedDraft={source:'FixedTest',speedKmh:10},userSpeedPending=false,ghostSpeedPending=false;
 let collectiblesDraft={source:'Fixed',fixedCount:10},collectiblesPending=false,collectiblesEdited=false;
+let behaviourPending=false,behaviourLoop=false,behaviourSpeed=1,plankHoldSeconds=10;
+const behaviourAnimations=[
+  {id:'Mixamo_BatterOnDeck',name:'Arme & Beine aufwärmen',category:'Warmup',duration:14.4,description:'Mixamo-Aufwärmen mit Armen und Beinen, ohne Schlägerhalten und Schlagbewegung.',icon:'↟'},
+  {id:'Mixamo_StartJumpingJacks',name:'Jumping Jacks',category:'Warmup',duration:1.267,continuous:true,description:'Durchgehender Mixamo-Loop: öffnen und schließen. Läuft bis zum Stoppen.',icon:'↔'},
+  {id:'Mixamo_WarmingUp',name:'Warming Up · ohne Schläge',category:'Warmup',duration:2.067,description:'Originale Mixamo-Arm- und Beinbewegungen bis vor die Faustschläge.',icon:'↻'},
+  {id:'Mixamo_ArmStretching',name:'Arm Stretching · Arme dehnen',category:'Warmup',duration:8.867,description:'Arme und Schultern mit der originalen Mixamo-Bewegung dehnen.',icon:'↔'},
+  {id:'Mixamo_AirSquat',name:'Air Squat · Kniebeugen',category:'Warmup',duration:1.867,description:'Kontrollierte Kniebeugen ohne Geräte.',icon:'↕'},
+  {id:'Mixamo_Plank',name:'Plank · Start, halten, Ende',category:'Warmup',duration:18.34,description:'In die Plank gehen, die eingestellte Dauer halten und anschließend wieder aufstehen. Wiederholung spielt den ganzen Ablauf.',icon:'▰'},
+  {id:'Idle',name:'Ruhig stehen',category:'Locomotion',description:'Die Ruheanimation am Platz abspielen.',icon:'○'},
+  {id:'Walking',name:'Gehen',category:'Locomotion',description:'Gehbewegung am Platz ansehen.',icon:'→'},
+  {id:'Jogging',name:'Joggen',category:'Locomotion',description:'Laufbewegung am Platz ansehen.',icon:'↗'},
+  {id:'Sprint',name:'Sprinten',category:'Locomotion',description:'Schnelle Laufbewegung am Platz ansehen.',icon:'»'}
+];
 const defaults = { paceSeconds: 360, mode: 'TempoPartner', showTrack: true };
 let draft = { ...defaults };
 try {
@@ -15,6 +28,7 @@ let lastTelemetryAt = 0;
 let state = { headsetConnected: false, telemetry: {}, registry: null }, connected = false, activeTab = 'treadmill', socket, reconnectDelay = 500, noticeTimer;
 const tabs = [
   ['treadmill','◎','Laufband','Pace und Begleiter für deine nächste Session vorbereiten.'],
+  ['behaviour','▷','Behaviour','Aufwärmen und Bewegungen deines Jogger-Avatars abspielen.'],
   ['sensors','♡','Sensoren & Session','Sensordaten beobachten und Sessions auf dem Server verwalten.'],
   ['markers','◇','Kalibrierung','Avatar platzieren und die Laufwelt ausrichten.']
 ];
@@ -65,11 +79,66 @@ function treadmill() {
   + card('Deine Laufvorschau',`<div class="metric-grid setup-metrics" id="setup-metrics"></div><div class="treadmill-preview"><svg viewBox="0 0 400 150" role="img" aria-label="Schematische Vorschau der virtuellen 400-Meter-Bahn"><g id="preview-route"><rect x="40" y="20" width="320" height="110" rx="55" fill="#202b3b" stroke="#536b8d"/><rect x="49" y="29" width="302" height="92" rx="46" fill="none" stroke="#899bb5"/><rect x="58" y="38" width="284" height="74" rx="37" fill="none" stroke="#899bb5"/><rect x="67" y="47" width="266" height="56" rx="28" fill="none" stroke="#899bb5"/></g><circle cx="200" cy="121" r="6" fill="#409cff" stroke="white" stroke-width="2"/><circle id="preview-partner" cx="230" cy="121" r="6" fill="#f09665" stroke="white" stroke-width="2"/><text x="200" y="72" text-anchor="middle" fill="#b1bfd2" font-size="10" letter-spacing="2">400 M · VIRTUELLE RUNDE</text><text x="200" y="90" text-anchor="middle" fill="#9baac1" font-size="9">KONFIGURATIONSVORSCHAU</text></svg></div><p id="mode-description" class="help"></p><p class="help">Beim Laufbandtraining läuft die virtuelle Strecke an dir vorbei. Die Vorschau zeigt deine Konfiguration, keine Live-Position.</p>`,false,'VORSCHAU')
   + card('Nutzertempo · Test oder Laufband',`<form id="user-speed-form"><div class="row"><label>Geschwindigkeitsquelle<select id="user-speed-source"><option value="FixedTest" ${userSpeedDraft.source==='FixedTest'?'selected':''}>Test · feste km/h</option><option value="Treadmill" ${userSpeedDraft.source==='Treadmill'?'selected':''}>Laufband · Sensordaten</option></select></label><label>Deine simulierte Geschwindigkeit · km/h<input id="user-speed-value" type="number" min="0" max="100" step="any" value="${userSpeedDraft.speedKmh}" inputmode="decimal" required ${userSpeedDraft.source==='Treadmill'?'disabled':''}></label></div><button id="user-speed-apply" class="primary" type="submit">Dein Tempo anwenden</button></form><div id="user-speed-metrics" class="metric-grid"></div><p id="user-speed-status" class="help" role="status"></p><p class="help">Testtempo simuliert deine Geschwindigkeit unabhängig vom Ghost. Im Laufbandmodus bleibst du körperlich stehen; die virtuelle Welt folgt später den gemessenen Laufband-km/h. Ohne aktuelle Laufbanddaten bleibt das Tempo bei 0. Die Hardware-Anbindung ist noch nicht implementiert. Quelle und feste Test-km/h lassen sich während des Laufs ändern, ohne den Avatar anzuhalten. Für eine echte Stadionbahn bleibt Headtracking maßgeblich.</p>`,true,'NUTZER')
   + card('Sammelkugeln',`<form id="collectibles-form"><div class="row"><label for="collectibles-source">Kugelmenge steuern<select id="collectibles-source"><option value="Fixed" ${collectiblesDraft.source==='Fixed'?'selected':''}>Feste Eingabe · ohne Sensor</option><option value="OxygenSensor" ${collectiblesDraft.source==='OxygenSensor'?'selected':''}>Sauerstoffsensor · SpO₂</option></select></label><label for="collectibles-count">Kugeln pro Reihe<input id="collectibles-count" type="number" min="0" max="30" step="1" inputmode="numeric" value="${collectiblesDraft.fixedCount}" required ${collectiblesDraft.source==='OxygenSensor'?'disabled':''}><small>0 bis 30 · 0 schaltet die Kugeln aus</small></label></div><button id="collectibles-apply" class="primary" type="submit">Kugelmenge anwenden</button></form><div id="collectibles-metrics" class="metric-grid"></div><p id="collectibles-status" class="help" role="status"></p><p class="help">Feste Eingabe funktioniert ohne Sensor. Im Sensormodus erzeugen höhere aktuelle SpO₂-Werte mehr Kugeln pro Reihe. Ohne gültiges Sensorsignal erscheinen keine Kugeln. Die Wellenreihen bleiben an der Strecke verankert; Änderungen erhalten den Sammelzähler. Das ist eine Spielzuordnung.</p>`,true,'SAMMELN')
-  + card('Laufsteuerung',`<div class="buttons"><button data-run="start" class="primary">Lauf starten</button><button data-run="pause">Pause</button><button data-run="resume">Fortsetzen</button><button data-run="stop">Stoppen</button><button data-run="reset">Laufdaten zurücksetzen</button></div><p id="run-feedback" class="help" role="status"></p><p class="help">Die Brille bestätigt jeden Befehl. Bei Verbindungsabbruch pausiert der Lauf.</p>`,true)
+  + card('Laufsteuerung',`<div class="buttons"><button data-run="start" class="primary">Lauf starten</button><button data-run="pause">Pause</button><button data-run="resume">Fortsetzen</button><button data-run="stop">Lauf beenden</button><button data-run="reset">Lauf zurücksetzen</button></div><p id="run-feedback" class="help" role="status"></p><p class="help">Lauf beenden hält den Avatar an seiner aktuellen Position: Er schaut dich an und gibt einen Daumen hoch. Distanz und Zeit bleiben erhalten. Lauf zurücksetzen setzt beide auf den Start zurück. Bei Verbindungsabbruch wird nur pausiert.</p>`,true)
   + card('Live auf der 400-m-Bahn',`<div class="live-track-wrap"><svg id="live-track" viewBox="0 0 400 210" role="img" aria-label="Live-Positionen auf der virtuellen Laufbahn"><path id="live-route" d="M275 45 A60 60 0 0 1 275 165 L125 165 A60 60 0 0 1 125 45 Z" fill="#202b3b" stroke="#536b8d" stroke-width="22"/><path d="M275 45 A60 60 0 0 1 275 165 L125 165 A60 60 0 0 1 125 45 Z" fill="none" stroke="#899bb5" stroke-width="1.5"/><line x1="275" y1="31" x2="275" y2="59" stroke="#b1bfd2" stroke-width="2"/><text x="200" y="99" text-anchor="middle" fill="#b1bfd2" font-size="13">400 m</text><text id="live-track-state" x="200" y="119" text-anchor="middle" fill="#b1bfd2" font-size="10">Warte auf Live-Daten</text><circle id="live-ghost" r="10" fill="#f09665" stroke="#899bb5" stroke-width="2" hidden/><circle id="live-user" r="5" fill="#409cff" stroke="#899bb5" stroke-width="2" hidden/></svg></div><div class="track-legend"><span><i class="user-dot"></i>Du</span><span><i class="ghost-dot"></i>Ghost</span><span id="live-freshness">Keine Positionsdaten</span></div><div class="metric-grid" id="ghost-metrics"></div><p class="help">Virtuelle Positionen entlang der Bahn, keine GPS-Ortung. Aktualisierung durch die Brille.</p>`,true,'LIVE')
   + card('Ghost-Geschwindigkeit testen',`<form id="ghost-speed-form"><label for="ghost-speed">Testgeschwindigkeit · km/h</label><div class="ghost-speed-controls"><input id="ghost-speed" type="number" min="0" step="any" value="10" inputmode="decimal" required><button id="ghost-speed-apply" type="submit" class="primary">Testtempo übernehmen</button><button id="ghost-speed-auto" type="button">Zurück zur Bestzeit</button></div></form><p id="ghost-mode-status" class="help" role="status">Warte auf Ghost-Telemetrie.</p><p class="help">Im Testmodus bewegt sich der Ghost mit deinem Testtempo unabhängig von der Bestzeit. 0 km/h hält ihn an. Pause und Stoppen pausieren auch den Ghost. Aufgezeichnete Bestzeiten bleiben erhalten.</p>`,true,'TESTMODUS')
   + card('Deine Rekordzeiten',`<div class="metric-grid" id="record-metrics"></div><p id="record-status" class="help" role="status"></p><p class="help">Gemessene Bestzeiten dieser App-Session. Zielpace und Beispielzeiten zählen nicht als Rekord. Nur „Laufdaten zurücksetzen“, ein Umgebungswechsel oder ein App-Neustart löschen diese Werte. Änderungen an Pace, Modus und Bahnsichtbarkeit erhalten die Bestzeit.</p>`,true,'BESTZEITEN')
   + card('Live-Status' ,'<div class="metric-grid" id="treadmill-metrics"></div><p class="help">Live-Werte erscheinen erst, wenn MarkerML2 seine Laufband-Telemetrie liefert.</p>',true,'HEADSET');
+}
+function behaviour() {
+  const entries=behaviourAnimations.map(entry=>({...entry,...state.registry?.animations?.find(item=>item&&typeof item==='object'&&item.id===entry.id)}));
+  const tiles=category=>`<div class="behaviour-grid">${entries.filter(item=>item.category===category).map(item=>`<div class="behaviour-tile" data-behaviour-tile="${escape(item.id)}"><div class="behaviour-tile-top"><span class="behaviour-icon" aria-hidden="true">${escape(item.icon)}</span><span class="pill">${item.id==='Mixamo_Plank'?'ABLAUF':item.duration?escape(Number(item.duration).toFixed(0))+' S':'AM PLATZ'}</span></div><h3>${escape(item.name)}</h3><p>${escape(item.description)}</p>${item.id==='Mixamo_Plank'?`<label for="plank-hold-seconds">Plank halten · Sekunden<input id="plank-hold-seconds" type="number" min="1" max="300" step="1" value="${plankHoldSeconds}"><small>1–300 s bei Normaltempo · gilt beim nächsten Abspielen</small></label>`:''}<button type="button" data-animation="${escape(item.id)}" aria-pressed="false" disabled>Abspielen</button></div>`).join('')}</div>`;
+  return card('Avatar steuern',`<div class="behaviour-now"><div><span class="eyebrow">AKTUELLE ANIMATION</span><strong id="behaviour-current">Warte auf die Brille</strong></div><button id="behaviour-stop" type="button" disabled>Zur Laufbewegung</button></div><div class="behaviour-options"><label class="behaviour-loop-label"><input id="behaviour-loop" type="checkbox" ${behaviourLoop?'checked':''}> Animation wiederholen</label><label for="behaviour-speed">Abspieltempo<select id="behaviour-speed">${[.25,.5,.75,1,1.25,1.5,2].map(value=>`<option value="${value}" ${value===behaviourSpeed?'selected':''}>${String(value).replace('.',',')}×${value===1?' · Normal':''}</option>`).join('')}</select></label></div><progress id="behaviour-progress" value="0" max="1" aria-label="Animationsfortschritt" hidden></progress><p id="behaviour-status" class="help" role="status"></p><p class="help">Eine manuelle Animation pausiert den Lauf und spielt am platzierten Avatar ab – in Side by Side und beim Tempo-Partner. Laufzeit, Distanz und Bestzeiten bleiben erhalten. Nach „Zur Laufbewegung“ kannst du den Lauf im Tab Laufband fortsetzen.</p>`,true,'AVATAR')
+    +card('Aufwärmen',tiles('Warmup'),true,'6 MIXAMO-ABLÄUFE')
+    +card('Bewegungen',tiles('Locomotion'),true,'VORSCHAU');
+}
+async function changeAvatarAnimation(animationId) {
+  if(behaviourPending)return;
+  const entry=behaviourAnimations.find(item=>item.id===animationId);
+  if(animationId!==null&&!entry)return;
+  const speed=Number($('#behaviour-speed')?.value??behaviourSpeed);
+  const loop=entry?.continuous||($('#behaviour-loop')?.checked??behaviourLoop);
+  if(entry?.continuous){behaviourLoop=true;if($('#behaviour-loop'))$('#behaviour-loop').checked=true;}
+  if(!Number.isFinite(speed)||speed<.25||speed>2){notice('Abspieltempo muss zwischen 0,25 und 2 liegen.');return;}
+  const payload=animationId===null?{}:{animationId,loop,speed};
+  if(animationId==='Mixamo_Plank'){
+    const seconds=Number($('#plank-hold-seconds')?.value??plankHoldSeconds);
+    if(!Number.isInteger(seconds)||seconds<1||seconds>300){notice('Plank-Haltedauer muss zwischen 1 und 300 Sekunden liegen.');return;}
+    if(!state.registry?.animations?.find(a=>a.id===animationId)?.supportsHoldDuration){notice('Für die einstellbare Plank-Dauer wird die aktualisierte MarkerML2-App benötigt.');return;}
+    plankHoldSeconds=seconds;payload.holdSeconds=seconds;
+  }
+  behaviourPending=true;updateLive();
+  try {
+    await confirmedCommand(animationId===null?'avatar.stopAnimation':'avatar.playAnimation',payload);
+    notice(animationId===null?'Automatische Laufbewegung von der Brille bestätigt.':`${entry.name} von der Brille bestätigt · Lauf bleibt pausiert.`);
+  } catch(error){notice(error.message);}
+  finally{behaviourPending=false;updateLive();}
+}
+function updateBehaviour(run,isML2) {
+  if(!$('#behaviour-status'))return;
+  const fresh=connected&&isML2&&Date.now()-lastTelemetryAt<5000;
+  const supported=state.registry?.commands?.includes('avatar.playAnimation')&&state.registry?.commands?.includes('avatar.stopAnimation');
+  const ready=run.placementReady&&run.heightConfirmed&&run.headPoseReady;
+  const available=new Set((state.registry?.animations||[]).filter(item=>item&&typeof item==='object').map(item=>item.id));
+  const current=fresh?run.behaviour:null;
+  document.querySelectorAll('[data-animation]').forEach(button=>{
+    const id=button.dataset.animation,active=!!current?.active&&current.animationId===id;
+    button.disabled=behaviourPending||!fresh||!supported||!ready||!available.has(id);
+    button.setAttribute('aria-pressed',String(active));
+    button.textContent=active?'Neu starten':'Abspielen';
+    button.title=!fresh?'Brille verbinden und aktuelle Daten abwarten.':!supported?'Aktualisierte MarkerML2-App erforderlich.':!ready?'Zuerst Bodenmarker und Platzierung unter Kalibrierung einrichten.':!available.has(id)?'Dieser Clip ist in der App nicht verfügbar.':'';
+  });
+  document.querySelectorAll('[data-behaviour-tile]').forEach(tile=>tile.classList.toggle('is-playing',!!current?.active&&tile.dataset.behaviourTile===current.animationId));
+  $('#behaviour-stop').disabled=behaviourPending||!fresh||!supported||!current?.active;
+  $('#behaviour-loop').disabled=behaviourPending;
+  if($('#plank-hold-seconds'))$('#plank-hold-seconds').disabled=behaviourPending;
+  $('#behaviour-speed').disabled=behaviourPending;
+  $('#behaviour-current').textContent=!fresh?'Warte auf die Brille':current?.active?(current.label||current.animationId):'Automatische Laufbewegung';
+  const progress=$('#behaviour-progress');
+  progress.hidden=!current?.active;
+  const elapsed=Number(current?.elapsed),duration=Number(current?.duration);
+  progress.value=Number.isFinite(elapsed)&&duration>0?(current.loop?(elapsed%duration)/duration:Math.min(1,elapsed/duration)):0;
+  $('#behaviour-status').textContent=behaviourPending?'Warte auf Bestätigung der Brille …':!fresh?'Keine aktuellen Daten von der Brille.':!supported?'Behaviour benötigt die aktualisierte MarkerML2-App auf der Brille.':!ready?'Unter Kalibrierung zuerst Bodenmarker und Avatar-Platzierung einrichten.':current?.active?`${current.loop?'Wiederholung':'Einmalige Wiedergabe'} · ${Number(current.speed||1).toLocaleString('de-DE')}× · Lauf pausiert.`:'Wähle eine Animation. Der Avatar bleibt an seiner platzierten Position.';
 }
 function sensors() {
   return card('BLE-Sensordaten','<div class="metric-grid" id="ble-metrics"></div><p class="help">MarkerML2 verwendet ein profilbasiertes BLE-Paket, unter anderem für Herzfrequenz, Temperatur und SpO₂. Hier erscheinen ausschließlich vom Headset übertragene Werte.</p><p class="help">Die Sensorverbindung wird am Headset eingerichtet.</p>',true,'HEADSET')
@@ -168,7 +237,7 @@ function organizeLayout() {
     (card.querySelector('.disclosure-body') || card).append(details);
   });
 }
-const renderers={treadmill,sensors,markers};
+const renderers={treadmill,behaviour,sensors,markers};
 function render() {
   const tab=tabs.find(t=>t[0]===activeTab);
   $('#page-title').textContent=tab[2];$('#page-description').textContent=tab[3];
@@ -193,6 +262,11 @@ function drawPreview(settings) {
 }
 function on(id,fn) {const el=$('#'+id);if(el) el.onclick=async()=>{try{await fn();}catch(e){notice(e.message);log('error',e.message);}};}
 function bind() {
+  document.querySelectorAll('[data-animation]').forEach(button=>button.onclick=()=>{if(!button.disabled)return changeAvatarAnimation(button.dataset.animation);});
+  if($('#plank-hold-seconds'))$('#plank-hold-seconds').oninput=()=>{const n=Number($('#plank-hold-seconds').value);if(Number.isInteger(n)&&n>=1&&n<=300)plankHoldSeconds=n;};
+  on('behaviour-stop',()=>changeAvatarAnimation(null));
+  if($('#behaviour-loop'))$('#behaviour-loop').onchange=()=>{behaviourLoop=$('#behaviour-loop').checked;};
+  if($('#behaviour-speed'))$('#behaviour-speed').onchange=()=>{behaviourSpeed=Number($('#behaviour-speed').value);};
   if($('#settings-form')) {
     $('#settings-form').onsubmit=e=>{
       e.preventDefault();const next=readDraft();
@@ -224,13 +298,13 @@ function bind() {
   document.querySelectorAll('[data-run]').forEach(button=>button.onclick=async()=>{
     if(runPending||button.disabled)return;
     const action=button.dataset.run;
-    if(action==='reset'&&!window.confirm('Laufdaten zurücksetzen? Laufzeit, Distanz und Rekorde dieser App-Session werden gelöscht.'))return;
+    if(action==='reset'&&!window.confirm('Lauf zurücksetzen? Laufzeit und Distanz werden auf null gesetzt; beide starten wieder am Anfang. Bestzeiten bleiben erhalten.'))return;
     runPending=true;updateLive();
     const feedback=$('#run-feedback');
     feedback.textContent='Warte auf Bestätigung der Brille …';
     try {
       await confirmedCommand('runningMate.command',{action});
-      feedback.textContent=({start:'Laufstart',pause:'Pause',resume:'Fortsetzen',stop:'Stoppen',reset:'Zurücksetzen'})[action]+' von der Brille bestätigt.';
+      feedback.textContent=({start:'Laufstart',pause:'Pause',resume:'Fortsetzen',stop:'Laufende',reset:'Zurücksetzen'})[action]+' von der Brille bestätigt.';
     } catch(error) {feedback.textContent='Aktion fehlgeschlagen: '+error.message;}
     finally {runPending=false;updateLive();}
   });
@@ -475,6 +549,7 @@ function updateLive() {
   updateGhostLive(run,isML2);
   updateUserSpeed(run,isML2);
   updateCollectibles(run,isML2);
+  updateBehaviour(run,isML2);
   updateRecords(run,isML2);
   updateCalibration(run,isML2);
   const indicators=[['Server',connected],['Headset',state.headsetConnected],['MarkerML2',isML2],['BLE',state.headsetConnected&&t.ble?.connected],['REC',state.recording]];
@@ -483,7 +558,7 @@ function updateLive() {
   $('#device-state').textContent=state.device?.simulated?'Simulator · Testdaten':'';
   updateConnectionNotice();
   $('#ack').textContent=state.lastAck?`${state.lastAck.success?'✓':'✕'} ${state.lastAck.commandType||'Befehl'}${state.lastAck.error?' · '+state.lastAck.error:''}`:'Noch kein Befehl gesendet';
-  if($('#treadmill-metrics')) $('#treadmill-metrics').innerHTML=metric('LAUFSTATUS',isML2?({Stopped:'Gestoppt',Ready:'Bereit',Running:'Läuft',Paused:'Pausiert',Idle:'Bereit'}[run.state]||run.state):null)+metric('DISTANZ',isML2?run.distance:null,'m')+metric('ZEIT',isML2?run.elapsed:null,'s')+metric('RUNDEN',isML2?run.laps:null)+metric('AKTIVER MODUS',isML2&&run.mode?modeName(run.mode):null)+metric('TEMPO',isML2?run.speedKmh:null,'km/h');
+  if($('#treadmill-metrics')) $('#treadmill-metrics').innerHTML=metric('LAUFSTATUS',isML2?({Stopped:'Beendet',Ready:'Bereit',Running:'Läuft',Paused:'Pausiert',Idle:'Bereit'}[run.state]||run.state):null)+metric('DISTANZ',isML2?run.distance:null,'m')+metric('ZEIT',isML2?run.elapsed:null,'s')+metric('RUNDEN',isML2?run.laps:null)+metric('AKTIVER MODUS',isML2&&run.mode?modeName(run.mode):null)+metric('TEMPO',isML2?run.speedKmh:null,'km/h');
   if($('#placement-metrics')) $('#placement-metrics').innerHTML=metric('HEADTRACKING',isML2?liveBool(run.headPoseReady):null)+metric('HÖHE',isML2?liveBool(run.heightConfirmed):null)+metric('PLATZIERUNG',isML2?liveBool(run.placementReady):null);
   if($('#ble-metrics')) {const b=t.ble||{};$('#ble-metrics').innerHTML=metric('HERZFREQUENZ',state.headsetConnected?b.hr:null,'BPM')+metric('TEMPERATUR',state.headsetConnected?b.temperature:null,'°C')+metric('SpO₂',state.headsetConnected?b.spo2:null,'%')+metric('PULS',state.headsetConnected?b.pr:null,'BPM')+metric('PERFUSION INDEX',state.headsetConnected?b.pi:null,'%');}
   if($('#session-state')) {

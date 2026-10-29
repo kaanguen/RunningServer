@@ -126,3 +126,33 @@ Aufnahmen liegen in `RunningServer/recordings/<ID>/`: `ble_data.csv`, `exercise_
 ## Geprüfter Stand
 
 Der Marker-/Floor-Ray-Spawn wurde mit Marker 39 auf der Magic Leap 2 bestätigt: `floorConfirmed: true`, `placementReady: true`, `avatarLane: 3`, `ghost.active: true`, gestoppte Session. Die danach ergänzte Geschwindigkeitsquellen-Auswahl und unabhängige Pace-Anpassung sind kompiliert/getestet, aber noch nicht im zuletzt installierten Build enthalten. Die feste reale 400-m-Bahn und echte Laufband-Hardware sind noch nicht durch einen vollständigen Geräte-Lauf verifiziert.
+
+## Avatar Behaviour (MarkerML2)
+
+`avatar.playAnimation`: `commandPayload` enthält `animationId` (String, erforderlich),
+`loop` (Boolean, optional, Standard true) und `speed` (Zahl 0.25–2, optional, Standard 1).
+IDs: `Mixamo_BatterOnDeck`, `Mixamo_StartJumpingJacks`, `Mixamo_WarmingUp`, `Mixamo_ArmStretching`, `Mixamo_AirSquat`, `Mixamo_Plank`, `Idle`, `Walking`,
+`Jogging`, `Sprint`. Ein gültiger Befehl benötigt die fertige Platzierung und pausiert
+gegebenenfalls die laufende Session, ohne deren Statistik zurückzusetzen.
+
+`avatar.stopAnimation`: leere Payload. Stellt automatische Locomotion wieder her;
+setzt eine pausierte Session nicht fort.
+
+Registry: `capabilities.avatarBehaviour`, `commands` und `animations` mit Einträgen
+`{id,name,category,duration}`. Telemetrie: `treadmill.behaviour` und
+`runningMate.behaviour` mit `{active,animationId,label,loop,speed,elapsed,duration}`.
+`elapsed` bezeichnet gespielte Clip-Sekunden einschließlich Tempo; bei Wiederholung
+läuft der Zähler weiter. Ohne manuelle Auswahl lautet `animationId` `Automatic`.
+
+Ungültige IDs, unbekannte Payload-Felder, falsche Typen und Tempi außerhalb des
+Bereichs werden vor einer Änderung der Session abgelehnt. Doppelte Command-IDs
+verwenden wie alle anderen Befehle den ACK-Cache.
+
+
+`Mixamo_Plank` ist ein einzelner Ablauf aus Start Plank → Plank (10 Clip-Sekunden Haltephase) → End Plank. Übergänge überblenden jeweils 0,18 s. `loop=true` wiederholt den gesamten Ablauf; `loop=false` spielt inklusive Aufstehen einmal. Das Abspieltempo skaliert alle Phasen (bei 2× sind es 5 reale Sekunden Halten). Explizites Stoppen unterbricht wie bei anderen Clips sofort.
+
+
+Einstellbare Plank-Dauer: `avatar.playAnimation` akzeptiert für `Mixamo_Plank` optional `holdSeconds` (1–300, Standard 10). Die Registry meldet `supportsHoldDuration: true` bei diesem Eintrag. Intro, zyklisches Halten und Outro werden als separate Animator-States gespielt; ein anderer Haltewert verändert nur die Haltephase, nicht das Tempo der Bewegungen. Wie das übrige Animationstempo skaliert `speed` auch die Haltezeit: 30 bei 2× entsprechen 15 realen Sekunden. Nicht-Plank-Clips lehnen `holdSeconds` ab.
+
+
+Laufende und Reset sind getrennt: `runningMate.command {action:"stop"}` pausiert die Laufzeit und erhält Distanzen und die aktuellen Weltpositionen beider Avatare. Nach einem laufenden oder pausierten Lauf dreht sich der aktive Avatar vor Ort zum Nutzer, spielt einmal `Standing Thumbs Up` und bleibt danach entspannt zu ihm ausgerichtet. Weitere Stop-Befehle starten die Geste nicht erneut. Pause und Verbindungsabbruch lösen sie nicht aus. `action:"reset"` beendet die Abschlussreaktion und setzt Nutzer-/Ghost-Distanz und Laufzeit auf null; gespeicherte Bestzeiten bleiben erhalten. Start/Fortsetzen und manuelle Animationen beenden die Abschlussreaktion ebenfalls.
