@@ -15,6 +15,10 @@ const behaviourAnimations=[
   {id:'Jogging',name:'Joggen',category:'Locomotion',description:'Laufbewegung am Platz ansehen.',icon:'↗'},
   {id:'Sprint',name:'Sprinten',category:'Locomotion',description:'Schnelle Laufbewegung am Platz ansehen.',icon:'»'}
 ];
+const warmupExercises=behaviourAnimations.filter(item=>item.category==='Warmup'&&item.id!=='Mixamo_Plank');
+let warmupDraft=['Mixamo_WarmingUp','Mixamo_ArmStretching','Mixamo_BatterOnDeck','Mixamo_AirSquat','Mixamo_StartJumpingJacks'].map(animationId=>({animationId,seconds:30}));
+let warmupPending=false,warmupFeedback='',warmupPlanFeedback='Passe den Ablauf vor dem Start an.';
+try {const saved=JSON.parse(localStorage.getItem('markerML2.warmup'));if(validateWarmupPlan(saved))warmupDraft=saved;}catch{}
 const defaults = { paceSeconds: 360, mode: 'TempoPartner', showTrack: true };
 let draft = { ...defaults };
 try {
@@ -28,6 +32,7 @@ let lastTelemetryAt = 0;
 let state = { headsetConnected: false, telemetry: {}, registry: null }, connected = false, activeTab = 'treadmill', socket, reconnectDelay = 500, noticeTimer;
 const tabs = [
   ['treadmill','◎','Laufband','Pace und Begleiter für deine nächste Session vorbereiten.'],
+  ['warmup','☀','Warm-up','Übungen auswählen, Dauer festlegen und mit dem Avatar aufwärmen.'],
   ['behaviour','▷','Behaviour','Aufwärmen und Bewegungen deines Jogger-Avatars abspielen.'],
   ['sensors','♡','Sensoren & Session','Sensordaten beobachten und Sessions auf dem Server verwalten.'],
   ['markers','◇','Kalibrierung','Avatar platzieren und die Laufwelt ausrichten.']
@@ -85,6 +90,95 @@ function treadmill() {
   + card('Deine Rekordzeiten',`<div class="metric-grid" id="record-metrics"></div><p id="record-status" class="help" role="status"></p><p class="help">Gemessene Bestzeiten dieser App-Session. Zielpace und Beispielzeiten zählen nicht als Rekord. Nur „Laufdaten zurücksetzen“, ein Umgebungswechsel oder ein App-Neustart löschen diese Werte. Änderungen an Pace, Modus und Bahnsichtbarkeit erhalten die Bestzeit.</p>`,true,'BESTZEITEN')
   + card('Live-Status' ,'<div class="metric-grid" id="treadmill-metrics"></div><p class="help">Live-Werte erscheinen erst, wenn MarkerML2 seine Laufband-Telemetrie liefert.</p>',true,'HEADSET');
 }
+function validateWarmupPlan(plan) {
+  return Array.isArray(plan)&&plan.length>=1&&plan.length<=20&&plan.every(step=>step&&warmupExercises.some(item=>item.id===step.animationId)&&Number.isInteger(step.seconds)&&step.seconds>=5&&step.seconds<=300);
+}
+function warmup() {
+  const total=warmupDraft.reduce((sum,step)=>sum+(Number.isFinite(step.seconds)?step.seconds:0),0);
+  return card('Dein Warm-up',`<div class="warmup-live"><span class="warmup-kicker">VOR DEM LAUF</span><h3 id="warmup-current">Bereit zum Aufwärmen</h3><div class="warmup-countdown" id="warmup-countdown">—<small>Sekunden übrig</small></div><progress id="warmup-progress" max="1" value="0" aria-label="Fortschritt des Warm-ups"></progress><p id="warmup-step-status" role="status"></p></div><div class="buttons"><button id="warmup-start" class="primary" type="button" disabled>Warm-up starten</button><button id="warmup-next" type="button" disabled>Nächste Übung</button><button id="warmup-stop" type="button" disabled>Warm-up beenden</button></div><p id="warmup-feedback" class="help" role="status"></p><div class="warmup-placement"><strong>Der Avatar macht vor, du machst mit.</strong><p>Schau beim Start geradeaus. Der Avatar steht etwa 2,5 m vor dir auf dem Boden und schaut zu dir. Oben in der Brille stehen „Warm UP“, die Übung und die verbleibenden Sekunden.</p></div><button id="warmup-to-run" type="button">Zur Laufsteuerung →</button><p class="help">Der Lauf startet anschließend über die Laufsteuerung. Deine gewählte Avatar-Bahn bleibt erhalten. Warm-up ist vor einer neuen Runde verfügbar; einen vorherigen Lauf zuerst zurücksetzen.</p>`,false,'MIXAMO')
+    +card('Übungsablauf festlegen',`<div class="warmup-plan-heading"><p>Reihenfolge und Dauer pro Übung. Jede Bewegung wiederholt sich fließend bis zum nächsten Schritt.</p><span id="warmup-total" class="pill">${paceText(total)} MIN GESAMT</span></div><ol id="warmup-plan" class="warmup-plan">${warmupDraft.map((step,index)=>`<li data-warmup-row="${index}"><span class="warmup-order">${index+1}</span><div class="warmup-fields"><label for="warmup-exercise-${index}">Übung<select id="warmup-exercise-${index}" data-warmup-exercise="${index}">${warmupExercises.map(item=>`<option value="${item.id}" ${step.animationId===item.id?'selected':''}>${escape(item.name)}</option>`).join('')}</select></label><label for="warmup-seconds-${index}">Dauer · s<input id="warmup-seconds-${index}" data-warmup-seconds="${index}" type="number" min="5" max="300" step="1" value="${escape(step.seconds)}" required></label></div><div class="warmup-row-actions"><button type="button" data-warmup-up="${index}" aria-label="Übung ${index+1} nach oben" ${index===0?'disabled':''}>↑</button><button type="button" data-warmup-down="${index}" aria-label="Übung ${index+1} nach unten" ${index===warmupDraft.length-1?'disabled':''}>↓</button><button type="button" data-warmup-remove="${index}" aria-label="Übung ${index+1} entfernen" ${warmupDraft.length===1?'disabled':''}>×</button></div></li>`).join('')}</ol><div class="buttons"><button id="warmup-add" type="button">+ Übung hinzufügen</button><button id="warmup-save" type="button">Ablauf speichern</button></div><p id="warmup-plan-feedback" class="help" role="status">${escape(warmupPlanFeedback)}</p><p class="help">5–300 Sekunden pro Übung · bis zu 20 Schritte. Plank ist in diesem Modus ausgeschlossen. Speichern behält den Ablauf in diesem Browser; „Warm-up starten“ sendet ihn an die Brille. Änderungen gelten für den nächsten Start.</p>`,false,'ABLAUF');
+}
+function warmupAvailability() {
+  const run=state.telemetry?.treadmill||{};
+  const fresh=connected&&state.headsetConnected&&state.registry?.project==='MarkerML2'&&Date.now()-lastTelemetryAt<5000;
+  const supported=['exercise.startWarmup','exercise.stopWarmup','exercise.nextWarmup'].every(command=>state.registry?.commands?.includes(command));
+  const available=new Set((state.registry?.animations||[]).map(item=>item?.id));
+  const beforeRun=['Stopped','Ready','Idle'].includes(run.state)&&Number(run.elapsed||0)<.01&&Number(run.distance||0)<.01;
+  const ready=run.placementReady&&run.headPoseReady&&run.heightConfirmed;
+  return {run,fresh,supported,ready,beforeRun,clipsReady:warmupDraft.every(step=>available.has(step.animationId))};
+}
+async function warmupCommand(action) {
+  if(warmupPending)return;
+  const {run,fresh,supported,ready,beforeRun,clipsReady}=warmupAvailability();
+  if(!fresh||!supported){notice('Brille verbinden und aktualisierte MarkerML2-App öffnen.');return;}
+  if(action==='start'&&(!validateWarmupPlan(warmupDraft)||!clipsReady)){notice('Wähle 1–20 verfügbare Übungen mit jeweils 5–300 ganzen Sekunden.');return;}
+  if(action==='start'&&(!ready||!beforeRun||run.warmup?.active)){notice('Zuerst Platzierung einrichten und einen vorherigen Lauf zurücksetzen oder das aktive Warm-up beenden.');return;}
+  if(action!=='start'&&!run.warmup?.active)return;
+  const payload=action==='start'?{steps:warmupDraft.map(step=>({...step}))}:{};
+  const command={start:'exercise.startWarmup',stop:'exercise.stopWarmup',next:'exercise.nextWarmup'}[action];
+  if(!command)return;
+  warmupPending=true;warmupFeedback='Warte auf Bestätigung der Brille …';updateLive();
+  try {await confirmedCommand(command,payload);warmupFeedback=({start:'Warm-up gestartet',stop:'Warm-up beendet',next:'Nächste Übung'})[action]+' · von der Brille bestätigt.';}
+  catch(error){warmupFeedback='Nicht ausgeführt: '+error.message;}
+  finally {warmupPending=false;updateLive();}
+}
+function bindWarmup() {
+  on('warmup-start',()=>warmupCommand('start'));
+  on('warmup-next',()=>warmupCommand('next'));
+  on('warmup-stop',()=>warmupCommand('stop'));
+  on('warmup-to-run',()=>{activeTab='treadmill';render();});
+  const editable=()=>!warmupPending&&!state.telemetry?.treadmill?.warmup?.active;
+  const changed=()=>{warmupPlanFeedback='Änderungen für den nächsten Start · noch nicht gespeichert.';};
+  document.querySelectorAll('[data-warmup-exercise]').forEach(input=>input.onchange=()=>{
+    if(!editable())return;
+    warmupDraft[Number(input.dataset.warmupExercise)].animationId=input.value;changed();updateLive();
+  });
+  document.querySelectorAll('[data-warmup-seconds]').forEach(input=>input.oninput=()=>{
+    if(!editable())return;
+    warmupDraft[Number(input.dataset.warmupSeconds)].seconds=Number(input.value);changed();updateLive();
+  });
+  for(const [attribute,change] of [['up',-1],['down',1],['remove',0]]){
+    document.querySelectorAll(`[data-warmup-${attribute}]`).forEach(button=>button.onclick=()=>{
+      if(!editable()||button.disabled)return;
+      const index=Number(button.dataset['warmup'+attribute[0].toUpperCase()+attribute.slice(1)]);
+      if(change===0){if(warmupDraft.length<=1)return;warmupDraft.splice(index,1);}
+      else {const target=index+change;if(target<0||target>=warmupDraft.length)return;[warmupDraft[index],warmupDraft[target]]=[warmupDraft[target],warmupDraft[index]];}
+      changed();render();
+    });
+  }
+  on('warmup-add',()=>{if(!editable()||warmupDraft.length>=20)return;warmupDraft.push({animationId:'Mixamo_ArmStretching',seconds:30});changed();render();});
+  on('warmup-save',()=>{
+    if(!editable())return;
+    if(!validateWarmupPlan(warmupDraft)){notice('Jede Übung braucht 5–300 ganze Sekunden.');return;}
+    try{localStorage.setItem('markerML2.warmup',JSON.stringify(warmupDraft));warmupPlanFeedback='Ablauf in diesem Browser gespeichert.';updateLive();}
+    catch {notice('Speichern ist in diesem Browser nicht verfügbar.');}
+  });
+}
+function updateWarmup(run,isML2) {
+  if(!$('#warmup-current'))return;
+  const {fresh,supported,ready,beforeRun,clipsReady}=warmupAvailability();
+  const current=fresh?run.warmup:null,active=!!current?.active;
+  $('#warmup-start').disabled=warmupPending||!fresh||!supported||!ready||!beforeRun||active||!clipsReady||!validateWarmupPlan(warmupDraft);
+  $('#warmup-start').hidden=active;
+  $('#warmup-next').disabled=warmupPending||!fresh||!supported||!active||!!current?.finishing;
+  $('#warmup-stop').disabled=warmupPending||!fresh||!supported||!active;
+  $('#warmup-next').hidden=$('#warmup-stop').hidden=!active;
+  const completed=current?.status==='Completed';
+  $('#warmup-current').textContent=!fresh?'Warte auf die Brille':active?(current.finishing?'Geschafft!':current.label):completed?'Warm-up geschafft':current?.status==='Interrupted'?'Warm-up unterbrochen':'Bereit zum Aufwärmen';
+  const remaining=active?Math.max(0,Math.ceil(Number(current.stepDuration)-Number(current.stepElapsed))):null;
+  $('#warmup-countdown').innerHTML=remaining===null?'—<small>Sekunden übrig</small>':`${remaining}<small>Sekunden übrig</small>`;
+  $('#warmup-step-status').textContent=active?`Übung ${Number(current.stepIndex)+1} von ${current.stepCount} · ${Math.ceil(Math.max(0,Number(current.duration)-Number(current.elapsed)))} s insgesamt übrig`:completed?'Du kannst jetzt zur Laufsteuerung wechseln.':'Die Laufzeit bleibt während des Warm-ups bei 0.';
+  $('#warmup-progress').value=active||completed?Math.min(1,Number(current.elapsed)/Math.max(1,Number(current.duration))):0;
+  $('#warmup-feedback').textContent=warmupPending?warmupFeedback:!fresh?'Brille verbinden und aktuelle Daten abwarten.':!supported?'Warm-up benötigt die aktualisierte MarkerML2-App.':!ready?'Zuerst unter Kalibrierung Bodenmarker und Avatar-Platzierung einrichten.':!beforeRun&&!active?'Für ein Warm-up vor der nächsten Runde zuerst den Lauf zurücksetzen.':!clipsReady?'Ein gewählter Mixamo-Clip fehlt in der App.':warmupFeedback;
+  const locked=warmupPending||active;
+  document.querySelectorAll('[data-warmup-exercise], [data-warmup-seconds]').forEach(input=>input.disabled=locked);
+  for(const [attribute,edge] of [['up',0],['down',warmupDraft.length-1],['remove',-1]])document.querySelectorAll(`[data-warmup-${attribute}]`).forEach(button=>button.disabled=locked||Number(button.dataset['warmup'+attribute[0].toUpperCase()+attribute.slice(1)])===edge||(attribute==='remove'&&warmupDraft.length<=1));
+  $('#warmup-add').disabled=locked||warmupDraft.length>=20;
+  $('#warmup-save').disabled=locked;
+  $('#warmup-plan-feedback').textContent=active?'Der laufende Ablauf ist auf der Brille gespeichert. Zum Bearbeiten zuerst beenden.':warmupPlanFeedback;
+  $('#warmup-total').textContent=paceText(warmupDraft.reduce((sum,step)=>sum+(Number.isFinite(step.seconds)?step.seconds:0),0))+' MIN GESAMT';
+}
+
 function behaviour() {
   const entries=behaviourAnimations.map(entry=>({...entry,...state.registry?.animations?.find(item=>item&&typeof item==='object'&&item.id===entry.id)}));
   const tiles=category=>`<div class="behaviour-grid">${entries.filter(item=>item.category===category).map(item=>`<div class="behaviour-tile" data-behaviour-tile="${escape(item.id)}"><div class="behaviour-tile-top"><span class="behaviour-icon" aria-hidden="true">${escape(item.icon)}</span><span class="pill">${item.id==='Mixamo_Plank'?'ABLAUF':item.duration?escape(Number(item.duration).toFixed(0))+' S':'AM PLATZ'}</span></div><h3>${escape(item.name)}</h3><p>${escape(item.description)}</p>${item.id==='Mixamo_Plank'?`<label for="plank-hold-seconds">Plank halten · Sekunden<input id="plank-hold-seconds" type="number" min="1" max="300" step="1" value="${plankHoldSeconds}"><small>1–300 s bei Normaltempo · gilt beim nächsten Abspielen</small></label>`:''}<button type="button" data-animation="${escape(item.id)}" aria-pressed="false" disabled>Abspielen</button></div>`).join('')}</div>`;
@@ -123,13 +217,13 @@ function updateBehaviour(run,isML2) {
   const current=fresh?run.behaviour:null;
   document.querySelectorAll('[data-animation]').forEach(button=>{
     const id=button.dataset.animation,active=!!current?.active&&current.animationId===id;
-    button.disabled=behaviourPending||!fresh||!supported||!ready||!available.has(id);
+    button.disabled=behaviourPending||!!run.warmup?.active||!fresh||!supported||!ready||!available.has(id);
     button.setAttribute('aria-pressed',String(active));
     button.textContent=active?'Neu starten':'Abspielen';
     button.title=!fresh?'Brille verbinden und aktuelle Daten abwarten.':!supported?'Aktualisierte MarkerML2-App erforderlich.':!ready?'Zuerst Bodenmarker und Platzierung unter Kalibrierung einrichten.':!available.has(id)?'Dieser Clip ist in der App nicht verfügbar.':'';
   });
   document.querySelectorAll('[data-behaviour-tile]').forEach(tile=>tile.classList.toggle('is-playing',!!current?.active&&tile.dataset.behaviourTile===current.animationId));
-  $('#behaviour-stop').disabled=behaviourPending||!fresh||!supported||!current?.active;
+  $('#behaviour-stop').disabled=behaviourPending||!!run.warmup?.active||!fresh||!supported||!current?.active;
   $('#behaviour-loop').disabled=behaviourPending;
   if($('#plank-hold-seconds'))$('#plank-hold-seconds').disabled=behaviourPending;
   $('#behaviour-speed').disabled=behaviourPending;
@@ -138,7 +232,7 @@ function updateBehaviour(run,isML2) {
   progress.hidden=!current?.active;
   const elapsed=Number(current?.elapsed),duration=Number(current?.duration);
   progress.value=Number.isFinite(elapsed)&&duration>0?(current.loop?(elapsed%duration)/duration:Math.min(1,elapsed/duration)):0;
-  $('#behaviour-status').textContent=behaviourPending?'Warte auf Bestätigung der Brille …':!fresh?'Keine aktuellen Daten von der Brille.':!supported?'Behaviour benötigt die aktualisierte MarkerML2-App auf der Brille.':!ready?'Unter Kalibrierung zuerst Bodenmarker und Avatar-Platzierung einrichten.':current?.active?`${current.loop?'Wiederholung':'Einmalige Wiedergabe'} · ${Number(current.speed||1).toLocaleString('de-DE')}× · Lauf pausiert.`:'Wähle eine Animation. Der Avatar bleibt an seiner platzierten Position.';
+  $('#behaviour-status').textContent=run.warmup?.active?'Warm-up läuft. Zum Ändern zuerst im Tab Warm-up beenden.':behaviourPending?'Warte auf Bestätigung der Brille …':!fresh?'Keine aktuellen Daten von der Brille.':!supported?'Behaviour benötigt die aktualisierte MarkerML2-App auf der Brille.':!ready?'Unter Kalibrierung zuerst Bodenmarker und Avatar-Platzierung einrichten.':current?.active?`${current.loop?'Wiederholung':'Einmalige Wiedergabe'} · ${Number(current.speed||1).toLocaleString('de-DE')}× · Lauf pausiert.`:'Wähle eine Animation. Der Avatar bleibt an seiner platzierten Position.';
 }
 function sensors() {
   return card('BLE-Sensordaten','<div class="metric-grid" id="ble-metrics"></div><p class="help">MarkerML2 verwendet ein profilbasiertes BLE-Paket, unter anderem für Herzfrequenz, Temperatur und SpO₂. Hier erscheinen ausschließlich vom Headset übertragene Werte.</p><p class="help">Die Sensorverbindung wird am Headset eingerichtet.</p>',true,'HEADSET')
@@ -237,7 +331,7 @@ function organizeLayout() {
     (card.querySelector('.disclosure-body') || card).append(details);
   });
 }
-const renderers={treadmill,behaviour,sensors,markers};
+const renderers={treadmill,warmup,behaviour,sensors,markers};
 function render() {
   const tab=tabs.find(t=>t[0]===activeTab);
   $('#page-title').textContent=tab[2];$('#page-description').textContent=tab[3];
@@ -262,6 +356,7 @@ function drawPreview(settings) {
 }
 function on(id,fn) {const el=$('#'+id);if(el) el.onclick=async()=>{try{await fn();}catch(e){notice(e.message);log('error',e.message);}};}
 function bind() {
+  bindWarmup();
   document.querySelectorAll('[data-animation]').forEach(button=>button.onclick=()=>{if(!button.disabled)return changeAvatarAnimation(button.dataset.animation);});
   if($('#plank-hold-seconds'))$('#plank-hold-seconds').oninput=()=>{const n=Number($('#plank-hold-seconds').value);if(Number.isInteger(n)&&n>=1&&n<=300)plankHoldSeconds=n;};
   on('behaviour-stop',()=>changeAvatarAnimation(null));
@@ -538,7 +633,7 @@ function updateLive() {
     const action=button.dataset.run;
     button.hidden=fresh?!actions[action]:action!=='start';
     const needsPlacement=action==='start'||action==='resume';
-    button.disabled=!fresh||!runSupported||(needsPlacement&&!runReady)||runPending||calibrationPending||settingsPending||!actions[action];
+    button.disabled=!fresh||!runSupported||(needsPlacement&&!runReady)||runPending||calibrationPending||settingsPending||warmupPending||!actions[action];
     button.title=button.disabled?(!fresh?'Brille verbinden und aktuelle Daten abwarten.':needsPlacement&&!runReady?'Zuerst unter Kalibrierung Bodenmarker und Platzierung prüfen.':'Warte auf Bestätigung oder einen passenden Laufzustand.') : '';
   });
   if($('#send-settings')) {
@@ -550,6 +645,7 @@ function updateLive() {
   updateUserSpeed(run,isML2);
   updateCollectibles(run,isML2);
   updateBehaviour(run,isML2);
+  updateWarmup(run,isML2);
   updateRecords(run,isML2);
   updateCalibration(run,isML2);
   const indicators=[['Server',connected],['Headset',state.headsetConnected],['MarkerML2',isML2],['BLE',state.headsetConnected&&t.ble?.connected],['REC',state.recording]];
