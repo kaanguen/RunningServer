@@ -122,3 +122,24 @@ test('relays ghost best-lap return with explicit null and propagates headset con
     assert.equal((await dashboard.next(m=>m.type==='ack'&&m.commandId===command.commandId)).success,true);
   }
 });
+
+test('relays remote BLE discovery, device identities, connection status and headset rejection',async t=>{
+  const f=await fixture(t), dashboard=await f.connect('dashboard'), headset=await f.connect('headset');
+  for(const [commandType,commandPayload] of [
+    ['sensor.startScan',{}],['sensor.stopScan',{}],['sensor.connect',{deviceId:'AA:02'}],['sensor.disconnect',{}]
+  ]) {
+    const response=await f.request('command',{commandType,commandPayload});
+    assert.equal(response.status,202);
+    const command=await headset.next(m=>m.type==='command');
+    assert.equal(command.commandType,commandType);
+    assert.deepEqual(command.commandPayload,commandPayload);
+    headset.send({type:'ack',commandId:command.commandId,success:commandType!=='sensor.connect',error:commandType==='sensor.connect'?'Device unavailable':undefined});
+    const ack=await dashboard.next(m=>m.type==='ack');
+    assert.equal(ack.success,commandType!=='sensor.connect');
+    if(commandType==='sensor.connect')assert.equal(ack.error,'Device unavailable');
+  }
+  const ble={available:true,connected:false,scanning:true,connecting:false,initializing:false,status:'Suche',deviceId:null,selectedDeviceId:null,devices:[{id:'AA:01',name:'Different brand'},{id:'AA:02',name:'Ohne Namen'}],spo2:null};
+  headset.send({type:'telemetry',data:{ble}});
+  assert.deepEqual((await dashboard.next(m=>m.type==='telemetry')).data.ble,ble);
+  assert.deepEqual((await (await f.request('status')).json()).telemetry.ble,ble);
+});

@@ -2,6 +2,7 @@ const $ = selector => document.querySelector(selector);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let userSpeedDraft={source:'FixedTest',speedKmh:10},userSpeedPending=false,ghostSpeedPending=false;
 let collectiblesDraft={source:'Fixed',fixedCount:10},collectiblesPending=false,collectiblesEdited=false;
+let blePending=false,bleSelectedDeviceId='',bleFeedback='';
 let behaviourPending=false,behaviourLoop=false,behaviourSpeed=1,plankHoldSeconds=10;
 const behaviourAnimations=[
   {id:'Mixamo_BatterOnDeck',name:'Arme und Beine',category:'Warmup',duration:14.4,description:'Mixamo-Aufwärmen mit Armen und Beinen, ohne Schlägerhalten und Schlagbewegung.',icon:'↟'},
@@ -235,8 +236,62 @@ function updateBehaviour(run,isML2) {
   progress.value=Number.isFinite(elapsed)&&duration>0?(current.loop?(elapsed%duration)/duration:Math.min(1,elapsed/duration)):0;
   $('#behaviour-status').textContent=run.warmup?.active?'Warm-up läuft. Zum Ändern zuerst im Tab Warm-up beenden.':behaviourPending?'Warte auf Bestätigung der Brille …':!fresh?'Keine aktuellen Daten von der Brille.':!supported?'Behaviour benötigt die aktualisierte MarkerML2-App auf der Brille.':!ready?'Unter Kalibrierung zuerst Bodenmarker und Avatar-Platzierung einrichten.':current?.active?`${current.loop?'Wiederholung':'Einmalige Wiedergabe'} · ${Number(current.speed||1).toLocaleString('de-DE')}× · Lauf pausiert.`:'Wähle eine Animation. Der Avatar bleibt an seiner platzierten Position.';
 }
+function bleControls() {
+  return card('Bluetooth-Geräte auf der Brille', `<div class="buttons"><button id="ble-scan" class="primary">BLE-Geräte suchen</button><button id="ble-stop-scan">Suche stoppen</button></div><div id="ble-connected-devices" class="metric-grid" aria-live="polite"></div><label for="ble-device">Gefundene Geräte<select id="ble-device"><option value="">Gerät auswählen</option></select></label><div class="buttons"><button id="ble-connect" class="primary">Verbinden</button><button id="ble-disconnect">Trennen / Verbindung abbrechen</button></div><p id="ble-status" class="help" role="status"></p><p id="ble-feedback" class="help" role="status">${escape(bleFeedback)}</p><p class="help">Die Magic Leap sucht alle von ihr erkannten BLE-Geräte, auch ohne Namen. Kein Namens- oder Geräteprofilfilter. Android-Berechtigungen gegebenenfalls einmal auf der Brille erlauben. Messwerte benötigen weiterhin passende Datenkanäle im Geräteprofil.</p>`, true, 'FERNSTEUERUNG');
+}
+async function sendBleCommand(type,payload={}) {
+  if(blePending)return;
+  blePending=true;bleFeedback='Warte auf Bestätigung der Brille …';updateLive();
+  try {
+    await confirmedCommand(type,payload);
+    bleFeedback=type==='sensor.connect'?'Verbindungsauftrag angenommen. Den tatsächlichen Verbindungsstatus meldet die Brille.':type==='sensor.startScan'?'Suchauftrag angenommen. Gefundene Geräte erscheinen automatisch.':type==='sensor.stopScan'?'Suche gestoppt.':'Verbindung getrennt.';
+  } catch(error) {bleFeedback=error.message;}
+  finally {blePending=false;updateLive();}
+}
+function updateBleControls() {
+  if(!$('#ble-device'))return;
+  const b=state.telemetry?.ble||{};
+  const fresh=connected&&state.headsetConnected&&Date.now()-lastTelemetryAt<3000;
+  const supports=command=>state.registry?.commands?.includes(command);
+  const available=fresh&&b.available===true;
+  const devices=Array.isArray(b.devices)?b.devices.filter(device=>typeof device?.id==='string'&&device.id.length>0):[];
+  if(!devices.some(device=>device.id===bleSelectedDeviceId))bleSelectedDeviceId='';
+  const select=$('#ble-device');
+  const options='<option value="">Gerät auswählen</option>'+devices.map(device=>`<option value="${escape(device.id)}">${escape(device.name||'Ohne Namen')} · ${escape(device.id)}</option>`).join('');
+  // Do not rebuild an open dropdown on every telemetry packet.
+  if(select.bleOptions!==options){select.innerHTML=options;select.bleOptions=options;}
+  select.value=bleSelectedDeviceId;
+  const busy=blePending||b.connecting||b.initializing;
+  select.disabled=!available||busy||b.connected||devices.length===0;
+  $('#ble-scan').disabled=!available||busy||b.scanning||b.connected||!supports('sensor.startScan');
+  $('#ble-stop-scan').disabled=!available||blePending||(!b.scanning&&!b.initializing)||!supports('sensor.stopScan');
+  $('#ble-connect').disabled=!available||busy||b.connected||!bleSelectedDeviceId||!supports('sensor.connect');
+  $('#ble-disconnect').disabled=!available||blePending||(!b.connected&&!b.connecting)||!supports('sensor.disconnect');
+  const current=devices.find(device=>device.id===b.deviceId);
+  const connectedDevices=Array.isArray(b.connectedDevices)?b.connectedDevices:(b.connected&&b.deviceId?[{id:b.deviceId,name:b.deviceName||current?.name}]:[]);
+  if($('#ble-connected-devices')) {
+    $('#ble-connected-devices').innerHTML=!fresh?metric('AKTUELL VERBUNDEN','Keine aktuellen Verbindungsdaten')
+      :!b.connected?metric('AKTUELL VERBUNDEN','Kein BLE-Gerät verbunden')
+      :connectedDevices.length?connectedDevices.map(device=>metric('VERBUNDENES GERÄT',device.name||'Ohne Namen')+metric('GERÄTEKENNUNG',device.id)).join('')
+      :metric('AKTUELL VERBUNDEN','Gerät verbunden · Kennung noch nicht gemeldet');
+  }
+  const connection=b.deviceId?`${current?.name||'Gerät'} · ${b.deviceId}`:'';
+  $('#ble-status').textContent=!fresh?'Brille verbinden und aktuelle Daten abwarten.':!supports('sensor.startScan')?'BLE-Fernsuche benötigt die aktualisierte App auf der Brille.':!b.available?'Keine BLE-Komponente auf der Brille verfügbar.':`${b.status||'Bereit.'}${connection?' · '+connection:''} · ${devices.length} Geräte gefunden${b.scanning?' · Suche läuft':''}`;
+  $('#ble-feedback').textContent=bleFeedback;
+}
+function updateBleMetrics() {
+  if(!$('#ble-metrics'))return;
+  const b=state.telemetry?.ble||{};
+  const live=connected&&state.headsetConnected&&b.connected&&Date.now()-lastTelemetryAt<3000;
+  const reading=value=>live&&typeof value==='number'&&Number.isFinite(value)?value.toLocaleString('de-DE',{maximumFractionDigits:2}):null;
+  $('#ble-metrics').innerHTML=metric('HERZFREQUENZ',reading(b.hr),'BPM')+metric('TEMPERATUR',reading(b.temperature),'°C')
+    +metric('SpO₂',reading(b.spo2),'%')+metric('PULS',reading(b.pr),'BPM')+metric('PERFUSION INDEX',reading(b.pi),'%');
+  if($('#ble-values-status'))$('#ble-values-status').textContent=!live?'Keine aktuelle Sensorverbindung · Messwerte werden ausgeblendet.'
+    :[b.hr,b.temperature,b.spo2,b.pr,b.pi].some(value=>typeof value==='number'&&Number.isFinite(value))?'Aktuelle Messwerte von der Brille. — bedeutet: kein gültiger aktueller Wert.'
+    :'Gerät verbunden · noch keine gültigen aktuellen Messwerte. Sensor tragen und passende Datenkanäle im Geräteprofil prüfen.';
+}
 function sensors() {
-  return card('BLE-Sensordaten','<div class="metric-grid" id="ble-metrics"></div><p class="help">MarkerML2 verwendet ein profilbasiertes BLE-Paket, unter anderem für Herzfrequenz, Temperatur und SpO₂. Hier erscheinen ausschließlich vom Headset übertragene Werte.</p><p class="help">Die Sensorverbindung wird am Headset eingerichtet.</p>',true,'HEADSET')
+  return bleControls() + card('BLE-Sensordaten','<div class="metric-grid" id="ble-metrics"></div><p id="ble-values-status" class="help" role="status"></p><p class="help">MarkerML2 verwendet ein profilbasiertes BLE-Paket, unter anderem für Herzfrequenz, Temperatur und SpO₂. Hier erscheinen ausschließlich vom Headset übertragene Werte.</p>',true,'HEADSET')
   + card('Server-Session',`<label>Sessionname<input id="session-name" placeholder="Laufbandtraining" maxlength="200"></label><p id="session-state" class="help"></p><div class="buttons"><button id="session-start" class="primary">Session anlegen</button><button id="session-stop">Session beenden</button></div><p class="help">Diese Session verwaltet die Aufzeichnung auf dem Server. Sie startet keinen Lauf in Unity.</p>`)
   + card('Aufzeichnung',`<p id="recording-state" class="help"></p><div class="buttons"><button id="recording-start" class="primary">● Aufnahme starten</button><button id="recording-stop">Aufnahme stoppen</button></div><p class="help">CSV und JSONL werden auf dem Server gespeichert. Ohne übertragene Sensordaten bleibt die Aufnahme leer.</p>`);
 }
@@ -357,6 +412,11 @@ function drawPreview(settings) {
 }
 function on(id,fn) {const el=$('#'+id);if(el) el.onclick=async()=>{try{await fn();}catch(e){notice(e.message);log('error',e.message);}};}
 function bind() {
+  on('ble-scan',()=>sendBleCommand('sensor.startScan'));
+  on('ble-stop-scan',()=>sendBleCommand('sensor.stopScan'));
+  on('ble-connect',()=>bleSelectedDeviceId?sendBleCommand('sensor.connect',{deviceId:bleSelectedDeviceId}):undefined);
+  on('ble-disconnect',()=>sendBleCommand('sensor.disconnect'));
+  if($('#ble-device'))$('#ble-device').onchange=()=>{bleSelectedDeviceId=$('#ble-device').value;updateBleControls();};
   bindWarmup();
   document.querySelectorAll('[data-animation]').forEach(button=>button.onclick=()=>{if(!button.disabled)return changeAvatarAnimation(button.dataset.animation);});
   if($('#plank-hold-seconds'))$('#plank-hold-seconds').oninput=()=>{const n=Number($('#plank-hold-seconds').value);if(Number.isInteger(n)&&n>=1&&n<=300)plankHoldSeconds=n;};
@@ -646,6 +706,7 @@ function updateLive() {
   updateGhostLive(run,isML2);
   updateUserSpeed(run,isML2);
   updateCollectibles(run,isML2);
+  updateBleControls();
   updateBehaviour(run,isML2);
   updateWarmup(run,isML2);
   updateRecords(run,isML2);
@@ -658,7 +719,7 @@ function updateLive() {
   $('#ack').textContent=state.lastAck?`${state.lastAck.success?'✓':'✕'} ${state.lastAck.commandType||'Befehl'}${state.lastAck.error?' · '+state.lastAck.error:''}`:'Noch kein Befehl gesendet';
   if($('#treadmill-metrics')) $('#treadmill-metrics').innerHTML=metric('LAUFSTATUS',isML2?({Stopped:'Beendet',Ready:'Bereit',Running:'Läuft',Paused:'Pausiert',Idle:'Bereit'}[run.state]||run.state):null)+metric('DISTANZ',isML2?run.distance:null,'m')+metric('ZEIT',isML2?run.elapsed:null,'s')+metric('RUNDEN',isML2?run.laps:null)+metric('AKTIVER MODUS',isML2&&run.mode?modeName(run.mode):null)+metric('TEMPO',isML2?run.speedKmh:null,'km/h');
   if($('#placement-metrics')) $('#placement-metrics').innerHTML=metric('HEADTRACKING',isML2?liveBool(run.headPoseReady):null)+metric('HÖHE',isML2?liveBool(run.heightConfirmed):null)+metric('PLATZIERUNG',isML2?liveBool(run.placementReady):null);
-  if($('#ble-metrics')) {const b=t.ble||{};$('#ble-metrics').innerHTML=metric('HERZFREQUENZ',state.headsetConnected?b.hr:null,'BPM')+metric('TEMPERATUR',state.headsetConnected?b.temperature:null,'°C')+metric('SpO₂',state.headsetConnected?b.spo2:null,'%')+metric('PULS',state.headsetConnected?b.pr:null,'BPM')+metric('PERFUSION INDEX',state.headsetConnected?b.pi:null,'%');}
+  updateBleMetrics();
   if($('#session-state')) {
     $('#session-state').textContent=state.session?`Aktiv: ${state.session.name}`:'Keine Server-Session aktiv';
     $('#session-start').disabled=!connected||!!state.session;$('#session-stop').disabled=!connected||!state.session||!!state.recording;

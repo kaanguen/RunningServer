@@ -75,7 +75,7 @@ Beim Serverstart die ausgegebene LAN-IP ablesen. In der Unity-Datei `Assets/Reso
 | --- | --- |
 | Laufband | Session-Konfiguration, Nutzertempo, Laufsteuerung, Live-Bahnkarte, Ghost-Testtempo und Rekorde |
 | Kalibrierung | Marker-/Plane-Status, erneutes Scannen, Umgebung, Avatar-Bahn 1–8, A/B-Stadionkalibrierung, Sweet Spot und Feinversätze |
-| Sensoren & Session | BLE-Verbindungsstatus, Server-Session und Aufzeichnung |
+| Sensoren & Session | Ungefilterte BLE-Suche auf der Brille, Geräteauswahl, Verbinden/Trennen, Server-Session und Aufzeichnung |
 | Log | Verbindungen, gesendete Befehle und Bestätigungen der Brille |
 
 ### Nutzer und Avatar haben getrennte Geschwindigkeiten
@@ -114,7 +114,7 @@ Unter `recordings/<ID>/` entstehen:
 - `commands.jsonl`
 - `session_meta.json`
 
-Der aktuelle Unity-Client überträgt BLE-Verbindungsstatus, aber noch keine vollständigen Vitalwert-/Übungsdaten. Leere Sensoraufnahmen sind deshalb möglich. Laufbahnpositionen und Rekorde haben noch keinen eigenen CSV-Export. Beim geordneten Serverstopp wird eine aktive Aufnahme abgeschlossen.
+Der aktuelle Unity-Client überträgt BLE-Verbindungsstatus, Gerätekennung sowie gültige aktuelle Werte für Herzfrequenz, Temperatur, SpO₂, Puls und Perfusionsindex. Nicht verfügbare Kanäle bleiben leer; Übungserkennungen werden noch nicht übertragen. Laufbahnpositionen und Rekorde haben noch keinen eigenen CSV-Export. Beim geordneten Serverstopp wird eine aktive Aufnahme abgeschlossen.
 
 ## Entwicklung und Prüfung
 
@@ -210,3 +210,16 @@ Protokoll: `exercise.startWarmup` mit
 `exercise.nextWarmup` und `exercise.stopWarmup` mit leerem Payload.
 Die Registry meldet diese Commands und `warmupSequence`; Status und tatsächlicher
 Fortschritt stehen unter `telemetry.treadmill.warmup`.
+
+## BLE-Geräte vom Dashboard verbinden
+
+1. Aktualisierte MarkerML2-App auf der Magic Leap starten und den Server verbinden.
+2. **Sensoren & Session → BLE-Geräte suchen** öffnen. Eventuelle Android-Berechtigungen einmal auf der Brille erlauben.
+3. Ein gefundenes Gerät anhand von Name und Kennung auswählen und **Verbinden** drücken. Die Liste enthält auch fremde Hersteller und namenlose Geräte; Namens- und Profilfilter werden nicht verwendet.
+4. Den tatsächlichen Status abwarten. **Trennen / Verbindung abbrechen** beendet auch laufende Verbindungsversuche.
+
+Die Brille führt Bluetooth aus. Messwerte erfordern weiterhin passende Geräteprofile. Eine angenommene Anfrage bedeutet noch keine erfolgreiche Verbindung. Alte App-Versionen bieten keine Fernsuche; dafür ist ein neuer Unity-Geräte-Build nötig.
+
+### Verbundenes Gerät und Vitalwerte
+
+**Sensoren & Session** zeigt das tatsächlich verbundene BLE-Gerät mit Name und Kennung unabhängig von der Suchliste. Die App unterstützt derzeit ein gleichzeitig verbundenes BLE-Gerät. Herzfrequenz (BPM), Temperatur (°C), SpO₂, Puls und Perfusionsindex werden als numerische Werte von der Brille übertragen und auch in `ble_data.csv` aufgezeichnet. Fehlende, ungültige oder abgelaufene Werte erscheinen als **—**; bei veralteter Telemetrie oder Verbindungsabbruch verschwinden die Live-Werte. Die Temperatur ist bereits auf der Brille nach Celsius umgerechnet. Messwerte benötigen passende Profilkanäle und einen neuen Unity-Build.
